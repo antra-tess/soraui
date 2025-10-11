@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: sora2-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/videos:/app/videos
+      - ./backend/uploads:/app/uploads
+    networks:
+      - sora2-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: sora2-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - sora2-network
+
+networks:
+  sora2-network:
+    driver: bridge
+
+volumes:
+  backend-data:
+  backend-videos:
+
