@@ -9,6 +9,7 @@ import { VideoService } from './services/video-service';
 import { createAuthMiddleware } from './auth/middleware';
 import { createAuthRouter } from './routes/auth';
 import { createVideosRouter } from './routes/videos';
+import { createAdminRouter } from './routes/admin';
 import { mkdirSync, existsSync } from 'fs';
 import { dirname } from 'path';
 import jwt from 'jsonwebtoken';
@@ -126,6 +127,7 @@ const flexibleAuthMiddleware = (req: any, res: any, next: any) => {
 };
 
 app.use('/api/videos', flexibleAuthMiddleware, createVideosRouter(videoService, VIDEOS_DIR, JWT_SECRET));
+app.use('/api/admin', authMiddleware, createAdminRouter(userManager));
 
 // WebSocket authentication and connection handling
 io.use((socket, next) => {

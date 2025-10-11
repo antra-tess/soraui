@@ -15,6 +15,10 @@
           {{ authStore.user?.username }}
         </v-chip>
 
+        <v-btn icon @click="settingsDialog = true" class="mr-2">
+          <v-icon>mdi-cog</v-icon>
+        </v-btn>
+
         <v-btn icon @click="handleLogout">
           <v-icon>mdi-logout</v-icon>
         </v-btn>
@@ -88,6 +92,10 @@
       v-model="playerDialog"
       :video="playingVideo"
     />
+
+    <SettingsDialog
+      v-model="settingsDialog"
+    />
   </div>
 </template>
 
@@ -102,6 +110,7 @@ import VideoCard from '@/components/VideoCard.vue'
 import RemixDialog from '@/components/RemixDialog.vue'
 import VideoPlayerDialog from '@/components/VideoPlayerDialog.vue'
 import CostStatsCard from '@/components/CostStatsCard.vue'
+import SettingsDialog from '@/components/SettingsDialog.vue'
 import type { Video } from '@/types'
 
 const router = useRouter()
@@ -114,6 +123,7 @@ const remixVideo = ref<Video | null>(null)
 const playerDialog = ref(false)
 const playingVideo = ref<Video | null>(null)
 const costStatsCard = ref<any>(null)
+const settingsDialog = ref(false)
 
 const wsConnected = computed(() => wsStore.connected)
 
