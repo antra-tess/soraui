@@ -19,9 +19,9 @@ dotenv.config();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const VIDEOS_DIR = process.env.VIDEOS_DIR || './videos';
-const DATABASE_PATH = process.env.DATABASE_PATH || './data/sora.db';
-const USERS_FILE = process.env.USERS_FILE || './data/users.json';
+const VIDEOS_DIR = process.env.VIDEOS_DIR || './storage/videos';
+const DATABASE_PATH = process.env.DATABASE_PATH || './storage/data/sora.db';
+const USERS_FILE = process.env.USERS_FILE || './storage/data/users.json';
 
 if (!OPENAI_API_KEY) {
   console.error('OPENAI_API_KEY environment variable is required');
