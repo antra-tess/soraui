@@ -11,7 +11,7 @@ import { createAuthRouter } from './routes/auth';
 import { createVideosRouter } from './routes/videos';
 import { createAdminRouter } from './routes/admin';
 import { mkdirSync, existsSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, join } from 'path';
 import jwt from 'jsonwebtoken';
 
 dotenv.config();
@@ -78,6 +78,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve frontend static files in production
+if (process.env.NODE_ENV === 'production') {
+  const frontendPath = join(process.cwd(), 'public');
+  if (existsSync(frontendPath)) {
+    app.use(express.static(frontendPath));
+  }
+}
+
 // Auth middleware
 const authMiddleware = createAuthMiddleware(userManager, JWT_SECRET);
 
@@ -128,6 +136,18 @@ const flexibleAuthMiddleware = (req: any, res: any, next: any) => {
 
 app.use('/api/videos', flexibleAuthMiddleware, createVideosRouter(videoService, VIDEOS_DIR, JWT_SECRET));
 app.use('/api/admin', authMiddleware, createAdminRouter(userManager));
+
+// Serve frontend index.html for all non-API routes (SPA support)
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    const indexPath = join(process.cwd(), 'public', 'index.html');
+    if (existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send('Frontend not built. Run npm run build:frontend');
+    }
+  });
+}
 
 // WebSocket authentication and connection handling
 io.use((socket, next) => {

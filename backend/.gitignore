@@ -3,6 +3,8 @@ dist/
 .env
 videos/
 data/
+storage/
+public/
 *.log
 .DS_Store
 
