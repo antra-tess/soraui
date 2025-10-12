@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { resolve } from 'path';
 import { User } from '../types';
 import bcrypt from 'bcrypt';
 
@@ -28,7 +29,7 @@ export class UserManager {
       console.log('⚠️  FIRST RUN: Created default user: admin / admin');
       console.log('⚠️  IMPORTANT: Change this password immediately via Settings!');
       console.log(`⚠️  Users file created at: ${this.usersFile}`);
-      console.log(`🔍 Absolute path: ${require('path').resolve(this.usersFile)}`);
+      console.log(`🔍 Absolute path: ${resolve(this.usersFile)}`);
       return;
     }
 
