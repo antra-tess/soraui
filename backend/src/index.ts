@@ -20,9 +20,14 @@ dotenv.config();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const VIDEOS_DIR = process.env.VIDEOS_DIR || './storage/videos';
-const DATABASE_PATH = process.env.DATABASE_PATH || './storage/data/sora.db';
-const USERS_FILE = process.env.USERS_FILE || './storage/data/users.json';
+
+// Use absolute paths for Railway volume mounting
+// Railway mounts volume at /app/storage but runs from /app/backend
+const isProduction = process.env.NODE_ENV === 'production';
+const storageBase = isProduction ? '/app/storage' : './storage';
+const VIDEOS_DIR = process.env.VIDEOS_DIR || `${storageBase}/videos`;
+const DATABASE_PATH = process.env.DATABASE_PATH || `${storageBase}/data/sora.db`;
+const USERS_FILE = process.env.USERS_FILE || `${storageBase}/data/users.json`;
 
 if (!OPENAI_API_KEY) {
   console.error('OPENAI_API_KEY environment variable is required');
