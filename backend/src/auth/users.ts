@@ -22,18 +22,21 @@ export class UserManager {
       };
       this.users.set(defaultUser.username, defaultUser);
       this.saveUsers();
-      console.log('Created default user: admin / admin (please change password!)');
+      console.log('⚠️  FIRST RUN: Created default user: admin / admin');
+      console.log('⚠️  IMPORTANT: Change this password immediately via Settings!');
+      console.log(`⚠️  Users file created at: ${this.usersFile}`);
       return;
     }
 
     try {
       const data = readFileSync(this.usersFile, 'utf-8');
       const usersArray: User[] = JSON.parse(data);
+      console.log(`✅ Loaded ${usersArray.length} user(s) from ${this.usersFile}`);
       usersArray.forEach(user => {
         this.users.set(user.username, user);
       });
     } catch (error) {
-      console.error('Error loading users file:', error);
+      console.error('❌ Error loading users file:', error);
       throw error;
     }
   }
