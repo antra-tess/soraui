@@ -13,6 +13,9 @@ export class UserManager {
   }
 
   private loadUsers(): void {
+    console.log(`🔍 Checking for users file at: ${this.usersFile}`);
+    console.log(`🔍 File exists: ${existsSync(this.usersFile)}`);
+    
     if (!existsSync(this.usersFile)) {
       // Create default admin user
       const defaultUser: User = {
@@ -25,6 +28,7 @@ export class UserManager {
       console.log('⚠️  FIRST RUN: Created default user: admin / admin');
       console.log('⚠️  IMPORTANT: Change this password immediately via Settings!');
       console.log(`⚠️  Users file created at: ${this.usersFile}`);
+      console.log(`🔍 Absolute path: ${require('path').resolve(this.usersFile)}`);
       return;
     }
 

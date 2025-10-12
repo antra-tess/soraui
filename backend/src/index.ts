@@ -29,6 +29,12 @@ if (!OPENAI_API_KEY) {
   process.exit(1);
 }
 
+// Debug: Log working directory and paths
+console.log('📂 Working directory:', process.cwd());
+console.log('📂 Videos dir:', VIDEOS_DIR);
+console.log('📂 Database path:', DATABASE_PATH);
+console.log('📂 Users file:', USERS_FILE);
+
 // Ensure directories exist
 const ensureDir = (path: string) => {
   const dir = dirname(path);
