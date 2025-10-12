@@ -23,7 +23,20 @@
     </v-img>
 
     <v-card-title class="text-wrap">
-      {{ video.prompt }}
+      <div class="prompt-text">
+        <div :class="{ 'prompt-collapsed': !promptExpanded && isLongPrompt }">
+          {{ video.prompt }}
+        </div>
+        <v-btn
+          v-if="isLongPrompt"
+          size="x-small"
+          variant="text"
+          @click="promptExpanded = !promptExpanded"
+          class="mt-1"
+        >
+          {{ promptExpanded ? 'Show Less' : 'Show More' }}
+        </v-btn>
+      </div>
     </v-card-title>
 
   <v-card-subtitle>
@@ -120,7 +133,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Video } from '@/types'
 import { apiClient } from '@/api/client'
 
@@ -133,6 +146,12 @@ defineEmits<{
   remix: [video: Video]
   play: [video: Video]
 }>()
+
+const promptExpanded = ref(false)
+
+const isLongPrompt = computed(() => {
+  return props.video.prompt.length > 80
+})
 
 const statusColor = computed(() => {
   switch (props.video.status) {
@@ -194,6 +213,24 @@ const thumbnailUrl = computed(() => {
 
 .mdi-spin {
   animation: spin 1s linear infinite;
+}
+
+.prompt-text {
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.prompt-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v-card-title .prompt-text {
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 </style>
 
