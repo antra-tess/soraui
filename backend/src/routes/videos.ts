@@ -73,6 +73,30 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
     }
   });
 
+  // Continue from last frame of a video
+  router.post('/:videoId/continue', async (req: AuthRequest, res) => {
+    try {
+      const { videoId } = req.params;
+      const { prompt, model, seconds } = req.body;
+
+      if (!prompt) {
+        return res.status(400).json({ error: 'Prompt is required' });
+      }
+
+      const video = await videoService.continueFromVideo(
+        req.user!.id,
+        videoId,
+        prompt,
+        model,
+        seconds
+      );
+      res.json(video);
+    } catch (error: any) {
+      console.error('Error continuing from video:', error);
+      res.status(500).json({ error: error.message || 'Failed to continue from video' });
+    }
+  });
+
   // Get video status
   router.get('/:videoId', async (req: AuthRequest, res) => {
     try {

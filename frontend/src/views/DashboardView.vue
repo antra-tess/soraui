@@ -76,7 +76,13 @@
             md="4"
             lg="3"
           >
-            <VideoCard :video="video" @delete="handleDelete" @remix="handleRemix" @play="handlePlay" />
+            <VideoCard 
+              :video="video" 
+              @delete="handleDelete" 
+              @remix="handleRemix" 
+              @play="handlePlay"
+              @continue="handleContinue"
+            />
           </v-col>
         </v-row>
       </v-container>
@@ -96,6 +102,12 @@
     <SettingsDialog
       v-model="settingsDialog"
     />
+
+    <ContinueDialog
+      v-model="continueDialog"
+      :video="continueVideo"
+      @continue="handleContinueSubmit"
+    />
   </div>
 </template>
 
@@ -111,6 +123,7 @@ import RemixDialog from '@/components/RemixDialog.vue'
 import VideoPlayerDialog from '@/components/VideoPlayerDialog.vue'
 import CostStatsCard from '@/components/CostStatsCard.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
+import ContinueDialog from '@/components/ContinueDialog.vue'
 import type { Video } from '@/types'
 
 const router = useRouter()
@@ -124,6 +137,8 @@ const playerDialog = ref(false)
 const playingVideo = ref<Video | null>(null)
 const costStatsCard = ref<any>(null)
 const settingsDialog = ref(false)
+const continueDialog = ref(false)
+const continueVideo = ref<Video | null>(null)
 
 const wsConnected = computed(() => wsStore.connected)
 
@@ -175,6 +190,23 @@ async function handleRemixSubmit(prompt: string) {
 function handlePlay(video: Video) {
   playingVideo.value = video
   playerDialog.value = true
+}
+
+function handleContinue(video: Video) {
+  continueVideo.value = video
+  continueDialog.value = true
+}
+
+async function handleContinueSubmit(data: { prompt: string; model?: string; seconds?: string }) {
+  if (!continueVideo.value) return
+
+  try {
+    await videosStore.continueFromVideo(continueVideo.value.id, data)
+    continueDialog.value = false
+    continueVideo.value = null
+  } catch (err) {
+    console.error('Error continuing from video:', err)
+  }
 }
 </script>
 

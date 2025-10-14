@@ -57,6 +57,18 @@ export const useVideosStore = defineStore('videos', () => {
     }
   }
 
+  async function continueFromVideo(videoId: string, data: { prompt: string; model?: string; seconds?: string }) {
+    try {
+      const video = await apiClient.continueFromVideo(videoId, data)
+      videos.value.unshift(video)
+      return video
+    } catch (err: any) {
+      error.value = err.message || 'Failed to continue from video'
+      console.error('Error continuing from video:', err)
+      throw err
+    }
+  }
+
   function updateVideo(videoId: string, updates: Partial<Video>) {
     const index = videos.value.findIndex(v => v.id === videoId)
     if (index !== -1) {
@@ -81,6 +93,7 @@ export const useVideosStore = defineStore('videos', () => {
     createVideo,
     deleteVideo,
     remixVideo,
+    continueFromVideo,
     updateVideo,
     setFullVideo
   }

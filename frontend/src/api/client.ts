@@ -75,6 +75,11 @@ class ApiClient {
     return response.data
   }
 
+  async continueFromVideo(videoId: string, data: { prompt: string; model?: string; seconds?: string }) {
+    const response = await this.client.post(`/videos/${videoId}/continue`, data)
+    return response.data
+  }
+
   getVideoUrl(videoId: string, variant: 'video' | 'thumbnail' = 'video') {
     const authStore = useAuthStore()
     return `/api/videos/${videoId}/content?variant=${variant}&token=${authStore.token}`

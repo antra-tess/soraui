@@ -8,18 +8,24 @@ A full-stack TypeScript application for creating and managing Sora2 video genera
 - 🎬 **Video Generation**: Create videos from text prompts using Sora 2 and Sora 2 Pro
 - 🖼️ **Image Reference**: Upload reference images for first-frame guidance
 - 🔄 **Video Remix**: Modify existing videos with targeted adjustments
+- ➡️ **Video Continuation**: Create sequences using last frame as first frame
 - 📚 **Library Management**: Browse, download, and delete videos
 - 🔐 **Authentication**: Simple JWT-based auth with local user storage
 - ⚡ **Real-time Updates**: WebSocket notifications for video progress
 - 💾 **Persistent Storage**: SQLite database + local file storage
-- 🔌 **MCP Compatible**: REST API works with MCP servers and other clients
+- 🔌 **MCP Server**: Built-in MCP server for AI agents
+- 💰 **Cost Tracking**: Track spending per user and platform-wide
 
 ### Frontend
 - 🎨 **Modern UI**: Responsive Vuetify 3 interface with dark mode
 - 📊 **Live Progress**: Real-time progress bars via WebSocket
 - 🖼️ **Thumbnail Previews**: Visual library with thumbnails
+- 🎥 **In-Browser Player**: Watch videos without downloading
 - 💾 **Easy Downloads**: One-click video downloads
 - 🔄 **Quick Remix**: Remix videos directly from the library
+- ➡️ **Video Continuation**: Continue from last frame
+- ⚙️ **User Management**: Change passwords and create users via UI
+- 💸 **Cost Dashboard**: Real-time spending tracker
 
 ## Quick Start
 
@@ -85,9 +91,9 @@ spra2/
 │   │   ├── db/          # SQLite database
 │   │   ├── routes/      # API routes
 │   │   ├── services/    # Video service
+│   │   ├── utils/       # Utilities (cost calc, video utils)
 │   │   └── index.ts     # Server entry
-│   ├── data/            # SQLite DB & users.json
-│   ├── videos/          # Downloaded videos
+│   ├── storage/         # Persistent data (database & videos)
 │   └── package.json
 │
 ├── frontend/            # Vue 3 + Vuetify frontend
@@ -97,6 +103,11 @@ spra2/
 │   │   ├── stores/      # Pinia stores
 │   │   ├── views/       # Page views
 │   │   └── main.ts      # App entry
+│   └── package.json
+│
+├── mcp-server/          # MCP server for AI agents
+│   ├── src/index.ts    # MCP implementation
+│   ├── USAGE.md        # Agent usage guide
 │   └── package.json
 │
 └── README.md            # This file

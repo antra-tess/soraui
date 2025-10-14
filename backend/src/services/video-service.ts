@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import axios from 'axios';
 import FormData from 'form-data';
 import { calculateVideoCost } from '../utils/cost-calculator';
+import { extractLastFrame } from '../utils/video-utils';
 
 export class VideoService {
   private apiKey: string;
@@ -146,6 +147,51 @@ export class VideoService {
     this.startPolling(videoId);
 
     return video;
+  }
+
+  async continueFromVideo(
+    userId: string,
+    originalVideoId: string,
+    prompt: string,
+    model?: 'sora-2' | 'sora-2-pro',
+    seconds?: string
+  ): Promise<Video> {
+    const originalVideo = this.db.getVideo(originalVideoId);
+    if (!originalVideo) {
+      throw new Error('Original video not found');
+    }
+
+    if (originalVideo.user_id !== userId) {
+      throw new Error('Not authorized to continue from this video');
+    }
+
+    if (originalVideo.status !== 'completed' || !originalVideo.file_path) {
+      throw new Error('Original video must be completed');
+    }
+
+    // Extract last frame from the video
+    const frameId = randomUUID();
+    const framePath = join(this.videosDir, `${frameId}_lastframe.jpg`);
+    
+    try {
+      await extractLastFrame(originalVideo.file_path, framePath);
+    } catch (error) {
+      console.error('Error extracting last frame:', error);
+      throw new Error('Failed to extract last frame from video');
+    }
+
+    // Create new video using the extracted frame as reference
+    const videoModel = model || originalVideo.model;
+    const videoDuration = seconds || originalVideo.seconds;
+    
+    return this.createVideo(
+      userId,
+      prompt,
+      videoModel as any,
+      originalVideo.size,
+      videoDuration,
+      framePath
+    );
   }
 
   async getVideoStatus(videoId: string): Promise<Video | null> {

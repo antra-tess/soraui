@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "sora2": {
+      "command": "node",
+      "args": [
+        "/Users/olena/spra2/mcp-server/dist/index.js"
+      ],
+      "env": {
+        "SORA2_BASE_URL": "http://localhost:3000",
+        "SORA2_USERNAME": "admin",
+        "SORA2_PASSWORD": "admin"
+      }
+    }
+  }
+}
+

@@ -118,6 +118,16 @@
         Remix
       </v-btn>
 
+      <v-btn
+        v-if="video.status === 'completed'"
+        color="accent"
+        variant="tonal"
+        @click="$emit('continue', video)"
+      >
+        <v-icon start>mdi-video-plus-outline</v-icon>
+        Continue
+      </v-btn>
+
       <v-spacer />
 
       <v-btn
@@ -145,6 +155,7 @@ defineEmits<{
   delete: [video: Video]
   remix: [video: Video]
   play: [video: Video]
+  continue: [video: Video]
 }>()
 
 const promptExpanded = ref(false)
