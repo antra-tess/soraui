@@ -306,36 +306,19 @@ export class VideoService {
         progress: openaiVideo.progress || video.progress
       };
 
-      // Handle stuck videos at 99-100% - try to download anyway
-      const isStuckAtHighProgress = openaiVideo.status === 'in_progress' && 
-                                   (openaiVideo.progress >= 99 || openaiVideo.progress === 100);
-      
-      if (openaiVideo.status === 'completed' || isStuckAtHighProgress) {
+      if (openaiVideo.status === 'completed') {
         // Download the video
         try {
-          console.log(`Attempting to download video ${videoId} (status: ${openaiVideo.status}, progress: ${openaiVideo.progress}%)`);
-          
           const videoPath = await this.downloadVideo(video.openai_video_id, videoId);
           const thumbnailPath = await this.downloadThumbnail(video.openai_video_id, videoId);
           
           updates.file_path = videoPath;
           updates.thumbnail_path = thumbnailPath;
           updates.completed_at = Date.now();
-          updates.status = 'completed'; // Force completed status
-          updates.progress = 100;
-          
-          console.log(`Successfully downloaded video ${videoId} that was stuck at ${openaiVideo.progress}%`);
-        } catch (error: any) {
+        } catch (error) {
           console.error(`Error downloading video ${videoId}:`, error);
-          
-          // If it was marked as completed but download failed, it's truly failed
-          if (openaiVideo.status === 'completed') {
-            updates.status = 'failed';
-            updates.error_message = 'Failed to download video';
-          } else {
-            // If stuck at 99% and download failed, keep polling but log it
-            console.log(`Video ${videoId} at ${openaiVideo.progress}% - download not ready yet, will retry`);
-          }
+          updates.status = 'failed';
+          updates.error_message = 'Failed to download video';
         }
       } else if (openaiVideo.status === 'failed') {
         updates.error_message = (openaiVideo as any).error?.message || 'Video generation failed';
