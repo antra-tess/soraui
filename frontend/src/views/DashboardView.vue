@@ -82,6 +82,7 @@
               @remix="handleRemix" 
               @play="handlePlay"
               @continue="handleContinue"
+              @status-updated="handleStatusUpdated"
             />
           </v-col>
         </v-row>
@@ -158,6 +159,11 @@ async function refreshVideos() {
 function handleVideoCreated() {
   // Video already added to store by CreateVideoCard
   // Note: Cost stats will auto-refresh when video completes via WebSocket
+}
+
+function handleStatusUpdated(updatedVideo: Video) {
+  // Update the video in the store with the new status
+  videosStore.setFullVideo(updatedVideo)
 }
 
 async function handleDelete(video: Video) {

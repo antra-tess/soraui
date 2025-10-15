@@ -97,6 +97,11 @@ class ApiClient {
     const response = await this.client.get('/videos/stats/costs')
     return response.data
   }
+
+  async forceCheckStatus(videoId: string) {
+    const response = await this.client.post(`/videos/${videoId}/check-status`)
+    return response.data
+  }
 }
 
 export const apiClient = new ApiClient()

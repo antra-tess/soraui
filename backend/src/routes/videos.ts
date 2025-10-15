@@ -208,6 +208,34 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
     }
   });
 
+  // Force check video status (for stuck videos)
+  router.post('/:videoId/check-status', async (req: AuthRequest, res) => {
+    try {
+      const { videoId } = req.params;
+
+      const video = await videoService.getVideoStatus(videoId);
+
+      if (!video) {
+        return res.status(404).json({ error: 'Video not found' });
+      }
+
+      if (video.user_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      // Force check the status
+      const updatedVideo = await videoService.forceCheckStatus(videoId);
+
+      res.json({
+        message: 'Status check triggered',
+        video: updatedVideo
+      });
+    } catch (error: any) {
+      console.error('Error force checking video status:', error);
+      res.status(500).json({ error: error.message || 'Failed to check video status' });
+    }
+  });
+
   // Extract screenshots from video (server-side)
   router.get('/:videoId/screenshots', async (req: AuthRequest, res) => {
     try {

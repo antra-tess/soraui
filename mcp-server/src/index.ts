@@ -110,6 +110,20 @@ class Sora2MCPServer {
         }
       },
       {
+        name: 'force_check_status',
+        description: 'Force an immediate status check for a video. Useful for videos stuck at 99% or when polling may have stopped. This will check OpenAI and restart polling if needed.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            video_id: {
+              type: 'string',
+              description: 'The video ID to force check'
+            }
+          },
+          required: ['video_id']
+        }
+      },
+      {
         name: 'list_videos',
         description: 'List all videos created by the authenticated user.',
         inputSchema: {
@@ -264,6 +278,27 @@ class Sora2MCPServer {
                   cost: video.cost,
                   completed: video.status === 'completed',
                   error: video.error_message
+                }, null, 2)
+              }]
+            };
+          }
+
+          case 'force_check_status': {
+            const response = await this.client.post(`/api/videos/${(args as any).video_id}/check-status`);
+            const video = response.data.video;
+
+            return {
+              content: [{
+                type: 'text',
+                text: JSON.stringify({
+                  message: response.data.message,
+                  video_id: video.id,
+                  status: video.status,
+                  progress: video.progress,
+                  prompt: video.prompt,
+                  completed: video.status === 'completed',
+                  error: video.error_message,
+                  note: video.status === 'completed' ? 'Video is now complete!' : 'Status updated, polling restarted if needed'
                 }, null, 2)
               }]
             };

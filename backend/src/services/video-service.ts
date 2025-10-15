@@ -231,6 +231,31 @@ export class VideoService {
     this.pollVideoStatus(videoId);
   }
 
+  /**
+   * Force poll a video's status immediately
+   * Useful for stuck videos or manual refresh
+   */
+  async forceCheckStatus(videoId: string): Promise<Video | null> {
+    const video = this.db.getVideo(videoId);
+    if (!video) {
+      return null;
+    }
+
+    // Poll the status immediately
+    await this.pollVideoStatus(videoId);
+
+    // If video is not completed/failed and not currently polling, restart polling
+    const updatedVideo = this.db.getVideo(videoId);
+    if (updatedVideo && updatedVideo.status !== 'completed' && updatedVideo.status !== 'failed') {
+      if (!this.pollingJobs.has(videoId)) {
+        console.log(`Restarting polling for stuck video ${videoId}`);
+        this.startPolling(videoId);
+      }
+    }
+
+    return updatedVideo;
+  }
+
   private stopPolling(videoId: string): void {
     const interval = this.pollingJobs.get(videoId);
     if (interval) {

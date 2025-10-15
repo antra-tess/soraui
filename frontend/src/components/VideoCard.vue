@@ -108,36 +108,78 @@
         Download
       </v-btn>
 
-      <v-btn
-        v-if="video.status === 'completed'"
-        color="secondary"
-        variant="tonal"
-        @click="$emit('remix', video)"
-      >
-        <v-icon start>mdi-auto-fix</v-icon>
-        Remix
-      </v-btn>
-
-      <v-btn
-        v-if="video.status === 'completed'"
-        color="accent"
-        variant="tonal"
-        @click="$emit('continue', video)"
-      >
-        <v-icon start>mdi-video-plus-outline</v-icon>
-        Continue
-      </v-btn>
-
       <v-spacer />
 
-      <v-btn
-        icon
-        variant="text"
-        color="error"
-        @click="$emit('delete', video)"
-      >
-        <v-icon>mdi-delete</v-icon>
-      </v-btn>
+      <!-- Three dot menu -->
+      <v-menu>
+        <template v-slot:activator="{ props }">
+          <v-btn
+            icon="mdi-dots-vertical"
+            variant="text"
+            v-bind="props"
+          />
+        </template>
+
+        <v-list>
+          <!-- Force Check Status - for stuck videos -->
+          <v-list-item
+            v-if="video.status === 'in_progress' || video.status === 'queued'"
+            @click="handleForceCheck"
+            :disabled="checkingStatus"
+          >
+            <template v-slot:prepend>
+              <v-icon :class="{ 'mdi-spin': checkingStatus }">
+                {{ checkingStatus ? 'mdi-loading' : 'mdi-refresh' }}
+              </v-icon>
+            </template>
+            <v-list-item-title>
+              {{ checkingStatus ? 'Checking...' : 'Force Check Status' }}
+            </v-list-item-title>
+            <v-list-item-subtitle v-if="video.progress >= 90">
+              Stuck at {{ video.progress }}%?
+            </v-list-item-subtitle>
+          </v-list-item>
+
+          <v-divider v-if="video.status === 'completed' || video.status === 'in_progress' || video.status === 'queued'" />
+
+          <!-- Remix -->
+          <v-list-item
+            v-if="video.status === 'completed'"
+            @click="$emit('remix', video)"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-auto-fix</v-icon>
+            </template>
+            <v-list-item-title>Remix</v-list-item-title>
+            <v-list-item-subtitle>Modify this video</v-list-item-subtitle>
+          </v-list-item>
+
+          <!-- Continue -->
+          <v-list-item
+            v-if="video.status === 'completed'"
+            @click="$emit('continue', video)"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-video-plus-outline</v-icon>
+            </template>
+            <v-list-item-title>Continue</v-list-item-title>
+            <v-list-item-subtitle>Extend this video</v-list-item-subtitle>
+          </v-list-item>
+
+          <v-divider v-if="video.status === 'completed'" />
+
+          <!-- Delete -->
+          <v-list-item
+            @click="$emit('delete', video)"
+            class="text-error"
+          >
+            <template v-slot:prepend>
+              <v-icon color="error">mdi-delete</v-icon>
+            </template>
+            <v-list-item-title>Delete</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
     </v-card-actions>
   </v-card>
 </template>
@@ -151,14 +193,33 @@ const props = defineProps<{
   video: Video
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   delete: [video: Video]
   remix: [video: Video]
   play: [video: Video]
   continue: [video: Video]
+  statusUpdated: [video: Video]
 }>()
 
 const promptExpanded = ref(false)
+const checkingStatus = ref(false)
+
+const handleForceCheck = async () => {
+  try {
+    checkingStatus.value = true
+    const result = await apiClient.forceCheckStatus(props.video.id)
+    
+    // Emit event to notify parent to refresh the video
+    emit('statusUpdated', result.video)
+    
+    // Show a success message
+    console.log('Status check triggered:', result.message)
+  } catch (error) {
+    console.error('Failed to force check status:', error)
+  } finally {
+    checkingStatus.value = false
+  }
+}
 
 const isLongPrompt = computed(() => {
   return props.video.prompt.length > 80
