@@ -2,6 +2,8 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 
 // Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -37,3 +39,50 @@ export function extractLastFrame(videoPath: string, outputPath: string): Promise
   });
 }
 
+/**
+ * Extract multiple frames from a video
+ * @param videoPath Path to the video file
+ * @param count Number of frames to extract (1-10)
+ * @returns Array of frame file paths, with last one being the final frame
+ */
+export async function extractVideoFrames(videoPath: string, count: number): Promise<string[]> {
+  const frameCount = Math.min(Math.max(count, 1), 10);
+  const tempDir = join(tmpdir(), `sora2-frames-${randomUUID()}`);
+  await fs.mkdir(tempDir, { recursive: true });
+
+  // Calculate timestamps
+  const timestamps: string[] = [];
+  if (frameCount === 1) {
+    timestamps.push('99%'); // Final frame only
+  } else {
+    // Distribute evenly, with last one being final frame
+    for (let i = 0; i < frameCount - 1; i++) {
+      const percent = (i / (frameCount - 1)) * 100;
+      timestamps.push(`${percent.toFixed(0)}%`);
+    }
+    timestamps.push('99%'); // Always end with final frame
+  }
+
+  const framePaths: string[] = [];
+
+  // Extract each frame
+  for (let i = 0; i < timestamps.length; i++) {
+    const framePath = join(tempDir, `frame_${i}.jpg`);
+    
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(videoPath)
+        .screenshots({
+          count: 1,
+          filename: `frame_${i}.jpg`,
+          folder: tempDir,
+          timestamps: [timestamps[i]]
+        })
+        .on('end', () => resolve())
+        .on('error', (err) => reject(err));
+    });
+
+    framePaths.push(framePath);
+  }
+
+  return framePaths;
+}

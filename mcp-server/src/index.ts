@@ -8,13 +8,6 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import axios, { AxiosInstance } from 'axios';
-import ffmpeg from 'fluent-ffmpeg';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
-import { join } from 'path';
-import { tmpdir } from 'os';
-
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 interface Sora2Config {
   baseUrl: string;
@@ -27,15 +20,9 @@ class Sora2MCPServer {
   private client: AxiosInstance;
   private token: string | null = null;
   private config: Sora2Config;
-  private tempDir: string;
 
   constructor(config: Sora2Config) {
     this.config = config;
-    this.tempDir = join(tmpdir(), 'sora2-mcp');
-    
-    if (!existsSync(this.tempDir)) {
-      mkdirSync(this.tempDir, { recursive: true });
-    }
 
     this.client = axios.create({
       baseURL: config.baseUrl,
@@ -219,64 +206,6 @@ class Sora2MCPServer {
     ];
   }
 
-  private async extractVideoFrames(videoPath: string, count: number): Promise<string[]> {
-    return new Promise((resolve, reject) => {
-      const framePaths: string[] = [];
-      const timestamps: string[] = [];
-      
-      // Calculate timestamps
-      if (count === 1) {
-        timestamps.push('99%'); // Last frame only
-      } else {
-        // Distribute evenly, ensure last one is final frame
-        for (let i = 0; i < count - 1; i++) {
-          const percent = (i / (count - 1)) * 100;
-          timestamps.push(`${percent.toFixed(0)}%`);
-        }
-        timestamps.push('99%'); // Final frame
-      }
-
-      let processedCount = 0;
-
-      timestamps.forEach((timestamp, index) => {
-        const filename = `frame_${index}.jpg`;
-        const outputPath = join(this.tempDir, filename);
-        
-        ffmpeg(videoPath)
-          .screenshots({
-            count: 1,
-            filename,
-            folder: this.tempDir,
-            timestamps: [timestamp]
-          })
-          .on('end', () => {
-            framePaths.push(outputPath);
-            processedCount++;
-            if (processedCount === timestamps.length) {
-              resolve(framePaths.sort());
-            }
-          })
-          .on('error', (err) => {
-            reject(err);
-          });
-      });
-    });
-  }
-
-  private async downloadVideo(videoId: string): Promise<string> {
-    const response = await this.client.get(`/api/videos/${videoId}/content?variant=video`, {
-      responseType: 'stream'
-    });
-
-    const videoPath = join(this.tempDir, `${videoId}.mp4`);
-    const writer = require('fs').createWriteStream(videoPath);
-
-    return new Promise((resolve, reject) => {
-      response.data.pipe(writer);
-      writer.on('finish', () => resolve(videoPath));
-      writer.on('error', reject);
-    });
-  }
 
   private setupHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -370,59 +299,33 @@ class Sora2MCPServer {
           }
 
           case 'get_video_screenshots': {
-            const videoResponse = await this.client.get(`/api/videos/${(args as any).video_id}`);
-            const video = videoResponse.data;
-
-            if (video.status !== 'completed') {
-              return {
-                content: [{
-                  type: 'text',
-                  text: JSON.stringify({
-                    error: `Video is not completed yet. Status: ${video.status}, Progress: ${video.progress}%`
-                  }, null, 2)
-                }]
-              };
-            }
-
-            // Download video
-            const videoPath = await this.downloadVideo((args as any).video_id);
-
-            // Extract frames
+            // Server-side extraction - much more efficient!
             const count = Math.min(Math.max((args as any).count || 3, 1), 10);
-            const framePaths = await this.extractVideoFrames(videoPath, count);
-
-            // Read frames as base64
-            const fs = await import('fs/promises');
-            const frames = await Promise.all(
-              framePaths.map(async (path, index) => {
-                const data = await fs.readFile(path);
-                return {
-                  frame_number: index + 1,
-                  is_final_frame: index === framePaths.length - 1,
-                  data: data.toString('base64'),
-                  mimeType: 'image/jpeg'
-                };
-              })
+            const response = await this.client.get(
+              `/api/videos/${(args as any).video_id}/screenshots`,
+              { params: { count } }
             );
+
+            const { video_id, prompt, frame_count, frames } = response.data;
 
             return {
               content: [
                 {
                   type: 'text',
                   text: JSON.stringify({
-                    video_id: (args as any).video_id,
-                    prompt: video.prompt,
-                    frame_count: frames.length,
-                    frames: frames.map(f => ({
+                    video_id,
+                    prompt,
+                    frame_count,
+                    frames: frames.map((f: any) => ({
                       frame_number: f.frame_number,
                       is_final_frame: f.is_final_frame
                     }))
                   }, null, 2)
                 },
-                ...frames.map(frame => ({
+                ...frames.map((frame: any) => ({
                   type: 'image' as const,
                   data: frame.data,
-                  mimeType: frame.mimeType
+                  mimeType: 'image/jpeg'
                 }))
               ]
             };

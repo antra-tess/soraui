@@ -3,8 +3,10 @@ import multer from 'multer';
 import { VideoService } from '../services/video-service';
 import { AuthRequest } from '../auth/middleware';
 import { createReadStream, existsSync } from 'fs';
+import { readFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import jwt from 'jsonwebtoken';
+import { extractVideoFrames } from '../utils/video-utils';
 
 const upload = multer({
   dest: 'uploads/',
@@ -203,6 +205,62 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
     } catch (error: any) {
       console.error('Error getting cost stats:', error);
       res.status(500).json({ error: error.message || 'Failed to get cost stats' });
+    }
+  });
+
+  // Extract screenshots from video (server-side)
+  router.get('/:videoId/screenshots', async (req: AuthRequest, res) => {
+    try {
+      const { videoId } = req.params;
+      const count = Math.min(Math.max(parseInt(req.query.count as string) || 3, 1), 10);
+
+      const video = await videoService.getVideoStatus(videoId);
+
+      if (!video) {
+        return res.status(404).json({ error: 'Video not found' });
+      }
+
+      if (video.user_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      if (video.status !== 'completed' || !video.file_path) {
+        return res.status(400).json({ error: 'Video is not ready yet' });
+      }
+
+      if (!existsSync(video.file_path)) {
+        return res.status(404).json({ error: 'Video file not found' });
+      }
+
+      // Extract frames
+      const framePaths = await extractVideoFrames(video.file_path, count);
+
+      // Read frames as base64
+      const frames = await Promise.all(
+        framePaths.map(async (path, index) => {
+          const data = await readFile(path);
+          return {
+            frame_number: index + 1,
+            is_final_frame: index === framePaths.length - 1,
+            data: data.toString('base64')
+          };
+        })
+      );
+
+      // Clean up temp files
+      await Promise.all(framePaths.map(path => 
+        unlink(path).catch(() => {})
+      ));
+
+      res.json({
+        video_id: videoId,
+        prompt: video.prompt,
+        frame_count: frames.length,
+        frames
+      });
+    } catch (error: any) {
+      console.error('Error extracting screenshots:', error);
+      res.status(500).json({ error: error.message || 'Failed to extract screenshots' });
     }
   });
 
