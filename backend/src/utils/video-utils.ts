@@ -1,12 +1,17 @@
 import ffmpeg from 'fluent-ffmpeg';
-import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 
-// Set ffmpeg path
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+// Use system-installed ffmpeg and ffprobe (installed in Docker/system)
+// fluent-ffmpeg will auto-detect these from PATH if not explicitly set
+try {
+  ffmpeg.setFfmpegPath('ffmpeg');
+  ffmpeg.setFfprobePath('ffprobe');
+} catch (error) {
+  console.warn('Warning: Could not set ffmpeg/ffprobe paths, will use system defaults');
+}
 
 /**
  * Extract the last frame from a video file
