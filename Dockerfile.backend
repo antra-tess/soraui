@@ -5,15 +5,12 @@ WORKDIR /app
 # Install FFmpeg for video processing
 RUN apk add --no-cache ffmpeg
 
-# Install dependencies (including dev dependencies for build)
+# Install dependencies (including dev dependencies for tsx)
 COPY backend/package*.json ./
 RUN npm ci
 
 # Copy application code
 COPY backend/ ./
-
-# Build TypeScript code
-RUN npm run build
 
 # Create necessary directories
 RUN mkdir -p data videos uploads && \
@@ -26,6 +23,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start application
-CMD ["npm", "start"]
+# Start application using tsx to run TypeScript directly
+CMD ["npm", "run", "start:prod"]
 
