@@ -5,24 +5,23 @@ WORKDIR /app
 # Install FFmpeg for video processing
 RUN apk add --no-cache ffmpeg
 
-# Copy root package.json for workspace setup
-COPY package*.json ../
-
-# Install dependencies (including dev dependencies for tsx)
-COPY backend/package*.json ./
-RUN npm ci
-
-# Copy frontend for building
-COPY frontend/ ../frontend/
-
-# Install frontend dependencies and build frontend
-RUN cd ../frontend && npm install && npm run build && mkdir -p ../backend/public && cp -r dist/* ../backend/public/
-
-# Copy application code
+# Copy application code first
 COPY backend/ ./
 
+# Install dependencies (including dev dependencies for tsx)
+RUN npm ci
+
+# Copy root package.json and frontend for building
+COPY package*.json ../
+COPY frontend/ ../frontend/
+
+# Install frontend dependencies and build frontend into backend/public
+RUN cd ../frontend && npm install && npm run build && \
+    mkdir -p /app/public && \
+    cp -r dist/* /app/public/
+
 # Create necessary directories
-RUN mkdir -p data videos uploads public && \
+RUN mkdir -p data videos uploads && \
     chmod 755 data videos uploads public
 
 # Expose port
