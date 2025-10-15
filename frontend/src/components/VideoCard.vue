@@ -181,6 +181,23 @@
         </v-list>
       </v-menu>
     </v-card-actions>
+
+    <!-- Snackbar for notifications -->
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="3000"
+    >
+      {{ snackbar.message }}
+      <template v-slot:actions>
+        <v-btn
+          variant="text"
+          @click="snackbar.show = false"
+        >
+          Close
+        </v-btn>
+      </template>
+    </v-snackbar>
   </v-card>
 </template>
 
@@ -203,19 +220,36 @@ const emit = defineEmits<{
 
 const promptExpanded = ref(false)
 const checkingStatus = ref(false)
+const snackbar = ref({
+  show: false,
+  message: '',
+  color: 'success'
+})
 
 const handleForceCheck = async () => {
   try {
     checkingStatus.value = true
+    console.log('Force checking status for video:', props.video.id)
+    
     const result = await apiClient.forceCheckStatus(props.video.id)
+    console.log('Force check result:', result)
     
     // Emit event to notify parent to refresh the video
     emit('statusUpdated', result.video)
     
-    // Show a success message
-    console.log('Status check triggered:', result.message)
-  } catch (error) {
+    // Show success message
+    snackbar.value = {
+      show: true,
+      message: result.video.status === 'completed' ? 'Video is complete! ✨' : 'Status updated, polling restarted',
+      color: 'success'
+    }
+  } catch (error: any) {
     console.error('Failed to force check status:', error)
+    snackbar.value = {
+      show: true,
+      message: error.response?.data?.error || 'Failed to check status',
+      color: 'error'
+    }
   } finally {
     checkingStatus.value = false
   }

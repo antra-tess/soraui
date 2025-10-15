@@ -241,8 +241,14 @@ export class VideoService {
       return null;
     }
 
-    // Poll the status immediately
-    await this.pollVideoStatus(videoId);
+    console.log('\n========== FORCE CHECK STATUS ==========');
+    console.log(`Video ID: ${videoId}`);
+    console.log(`OpenAI Video ID: ${video.openai_video_id}`);
+    console.log(`Current Status: ${video.status}`);
+    console.log(`Current Progress: ${video.progress}%`);
+
+    // Poll the status immediately with logging enabled
+    await this.pollVideoStatus(videoId, true);
 
     // If video is not completed/failed and not currently polling, restart polling
     const updatedVideo = this.db.getVideo(videoId);
@@ -252,6 +258,10 @@ export class VideoService {
         this.startPolling(videoId);
       }
     }
+
+    console.log(`Updated Status: ${updatedVideo?.status}`);
+    console.log(`Updated Progress: ${updatedVideo?.progress}%`);
+    console.log('========================================\n');
 
     return updatedVideo;
   }
@@ -264,7 +274,7 @@ export class VideoService {
     }
   }
 
-  private async pollVideoStatus(videoId: string): Promise<void> {
+  private async pollVideoStatus(videoId: string, isForceCheck: boolean = false): Promise<void> {
     try {
       const video = this.db.getVideo(videoId);
       if (!video) {
@@ -284,24 +294,48 @@ export class VideoService {
       );
       const openaiVideo = response.data;
 
+      // Log raw API response only for forced checks
+      if (isForceCheck) {
+        console.log('--- RAW OPENAI API RESPONSE ---');
+        console.log(JSON.stringify(openaiVideo, null, 2));
+        console.log('--- END RAW RESPONSE ---');
+      }
+
       const updates: Partial<Video> = {
         status: openaiVideo.status as any,
         progress: openaiVideo.progress || video.progress
       };
 
-      if (openaiVideo.status === 'completed') {
+      // Handle stuck videos at 99-100% - try to download anyway
+      const isStuckAtHighProgress = openaiVideo.status === 'in_progress' && 
+                                   (openaiVideo.progress >= 99 || openaiVideo.progress === 100);
+      
+      if (openaiVideo.status === 'completed' || isStuckAtHighProgress) {
         // Download the video
         try {
+          console.log(`Attempting to download video ${videoId} (status: ${openaiVideo.status}, progress: ${openaiVideo.progress}%)`);
+          
           const videoPath = await this.downloadVideo(video.openai_video_id, videoId);
           const thumbnailPath = await this.downloadThumbnail(video.openai_video_id, videoId);
           
           updates.file_path = videoPath;
           updates.thumbnail_path = thumbnailPath;
           updates.completed_at = Date.now();
-        } catch (error) {
+          updates.status = 'completed'; // Force completed status
+          updates.progress = 100;
+          
+          console.log(`Successfully downloaded video ${videoId} that was stuck at ${openaiVideo.progress}%`);
+        } catch (error: any) {
           console.error(`Error downloading video ${videoId}:`, error);
-          updates.status = 'failed';
-          updates.error_message = 'Failed to download video';
+          
+          // If it was marked as completed but download failed, it's truly failed
+          if (openaiVideo.status === 'completed') {
+            updates.status = 'failed';
+            updates.error_message = 'Failed to download video';
+          } else {
+            // If stuck at 99% and download failed, keep polling but log it
+            console.log(`Video ${videoId} at ${openaiVideo.progress}% - download not ready yet, will retry`);
+          }
         }
       } else if (openaiVideo.status === 'failed') {
         updates.error_message = (openaiVideo as any).error?.message || 'Video generation failed';
@@ -312,8 +346,13 @@ export class VideoService {
       // Emit event (will be handled by WebSocket service)
       this.emitVideoUpdate(video.user_id, videoId, updates);
 
-    } catch (error) {
-      console.error(`Error polling video ${videoId}:`, error);
+    } catch (error: any) {
+      if (isForceCheck) {
+        console.error(`Error during force check for video ${videoId}:`);
+        console.error('Error details:', error.response?.data || error.message || error);
+      } else {
+        console.error(`Error polling video ${videoId}:`, error);
+      }
     }
   }
 
