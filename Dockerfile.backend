@@ -5,12 +5,15 @@ WORKDIR /app
 # Install FFmpeg for video processing
 RUN apk add --no-cache ffmpeg
 
-# Install dependencies
+# Install dependencies (including dev dependencies for build)
 COPY backend/package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy application code
 COPY backend/ ./
+
+# Build TypeScript code
+RUN npm run build
 
 # Create necessary directories
 RUN mkdir -p data videos uploads && \
