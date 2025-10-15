@@ -5,12 +5,16 @@ import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 
 // Use system-installed ffmpeg and ffprobe (installed in Docker/system)
-// fluent-ffmpeg will auto-detect these from PATH if not explicitly set
+// In Alpine Linux (Docker), these are installed to /usr/bin/
+const ffmpegPath = process.env.FFMPEG_PATH || '/usr/bin/ffmpeg';
+const ffprobePath = process.env.FFPROBE_PATH || '/usr/bin/ffprobe';
+
 try {
-  ffmpeg.setFfmpegPath('ffmpeg');
-  ffmpeg.setFfprobePath('ffprobe');
+  ffmpeg.setFfmpegPath(ffmpegPath);
+  ffmpeg.setFfprobePath(ffprobePath);
+  console.log(`FFmpeg configured: ffmpeg=${ffmpegPath}, ffprobe=${ffprobePath}`);
 } catch (error) {
-  console.warn('Warning: Could not set ffmpeg/ffprobe paths, will use system defaults');
+  console.error('Error setting ffmpeg/ffprobe paths:', error);
 }
 
 /**
