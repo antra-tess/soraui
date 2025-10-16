@@ -125,14 +125,21 @@ async function handleSubmit() {
   loading.value = true
 
   try {
+    console.log('Input reference value:', inputReference.value)
+    console.log('Is array?', Array.isArray(inputReference.value))
+    console.log('Length:', inputReference.value?.length)
+    
     const formData = new FormData()
     formData.append('prompt', prompt.value)
     formData.append('model', model.value)
     formData.append('size', size.value)
     formData.append('seconds', seconds.value)
 
-    if (inputReference.value.length > 0) {
+    if (inputReference.value && inputReference.value.length > 0) {
+      console.log('Adding file to FormData:', inputReference.value[0])
       formData.append('input_reference', inputReference.value[0])
+    } else {
+      console.log('No file to add')
     }
 
     await videosStore.createVideo(formData)
