@@ -92,7 +92,7 @@ const prompt = ref('')
 const model = ref<'sora-2' | 'sora-2-pro'>('sora-2')
 const size = ref('1280x720')
 const seconds = ref('8')
-const inputReference = ref<File[]>([])
+const inputReference = ref<File | File[] | null>(null)
 const loading = ref(false)
 const errors = ref<{ prompt?: string; file?: string }>({})
 
@@ -127,7 +127,7 @@ async function handleSubmit() {
   try {
     console.log('Input reference value:', inputReference.value)
     console.log('Is array?', Array.isArray(inputReference.value))
-    console.log('Length:', inputReference.value?.length)
+    console.log('Type:', typeof inputReference.value)
     
     const formData = new FormData()
     formData.append('prompt', prompt.value)
@@ -135,9 +135,16 @@ async function handleSubmit() {
     formData.append('size', size.value)
     formData.append('seconds', seconds.value)
 
-    if (inputReference.value && inputReference.value.length > 0) {
-      console.log('Adding file to FormData:', inputReference.value[0])
-      formData.append('input_reference', inputReference.value[0])
+    // Handle both single File and array of Files
+    if (inputReference.value) {
+      const file = Array.isArray(inputReference.value) 
+        ? inputReference.value[0] 
+        : inputReference.value
+      
+      if (file) {
+        console.log('Adding file to FormData:', file.name, file.size)
+        formData.append('input_reference', file)
+      }
     } else {
       console.log('No file to add')
     }
@@ -146,7 +153,7 @@ async function handleSubmit() {
 
     // Reset form
     prompt.value = ''
-    inputReference.value = []
+    inputReference.value = null
     
     emit('videoCreated')
   } catch (err: any) {
