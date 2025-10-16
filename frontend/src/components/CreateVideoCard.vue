@@ -56,7 +56,7 @@
           prepend-icon="mdi-image"
           :disabled="loading"
           :error-messages="errors.file"
-          hint="Image to use as first frame. Must match the selected size."
+          hint="Image to use as first frame. Will be automatically resized and padded to match video resolution."
           persistent-hint
           clearable
           show-size

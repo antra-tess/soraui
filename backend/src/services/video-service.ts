@@ -75,8 +75,13 @@ export class VideoService {
       formData.append('seconds', seconds);
 
       if (processedImagePath) {
+        console.log(`Adding processed image to FormData: ${processedImagePath}`);
         formData.append('input_reference', createReadStream(processedImagePath));
       }
+
+      console.log('Sending video creation request to OpenAI...');
+      console.log(`Model: ${model}, Size: ${size}, Seconds: ${seconds}`);
+      console.log(`Has input_reference: ${!!processedImagePath}`);
 
       const response = await axios.post(`${this.baseURL}/videos`, formData, {
         headers: {
@@ -86,6 +91,8 @@ export class VideoService {
       });
 
       const openaiVideo = response.data;
+      
+      console.log('OpenAI response:', JSON.stringify(openaiVideo, null, 2));
 
       const cost = calculateVideoCost(model, size, seconds);
 
