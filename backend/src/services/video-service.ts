@@ -7,6 +7,7 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { calculateVideoCost } from '../utils/cost-calculator';
 import { extractLastFrame } from '../utils/video-utils';
+import { resizeAndPadImage, cleanupTempImage } from '../utils/image-utils';
 
 export class VideoService {
   private apiKey: string;
@@ -57,48 +58,62 @@ export class VideoService {
     inputReferencePath?: string
   ): Promise<Video> {
     const videoId = randomUUID();
+    let processedImagePath: string | undefined;
 
-    // Create video with OpenAI Sora API
-    const formData = new FormData();
-    formData.append('model', model);
-    formData.append('prompt', prompt);
-    formData.append('size', size);
-    formData.append('seconds', seconds);
-
-    if (inputReferencePath) {
-      formData.append('input_reference', createReadStream(inputReferencePath));
-    }
-
-    const response = await axios.post(`${this.baseURL}/videos`, formData, {
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        ...formData.getHeaders()
+    try {
+      // Process the input image if provided
+      if (inputReferencePath) {
+        console.log(`Processing uploaded image for video ${videoId}, target size: ${size}`);
+        processedImagePath = await resizeAndPadImage(inputReferencePath, size);
       }
-    });
 
-    const openaiVideo = response.data;
+      // Create video with OpenAI Sora API
+      const formData = new FormData();
+      formData.append('model', model);
+      formData.append('prompt', prompt);
+      formData.append('size', size);
+      formData.append('seconds', seconds);
 
-    const cost = calculateVideoCost(model, size, seconds);
+      if (processedImagePath) {
+        formData.append('input_reference', createReadStream(processedImagePath));
+      }
 
-    const video: Video = {
-      id: videoId,
-      user_id: userId,
-      openai_video_id: openaiVideo.id,
-      prompt,
-      model,
-      size,
-      seconds,
-      status: openaiVideo.status as any,
-      progress: openaiVideo.progress || 0,
-      created_at: openaiVideo.created_at,
-      has_input_reference: !!inputReferencePath,
-      cost
-    };
+      const response = await axios.post(`${this.baseURL}/videos`, formData, {
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          ...formData.getHeaders()
+        }
+      });
 
-    this.db.createVideo(video);
-    this.startPolling(videoId);
+      const openaiVideo = response.data;
 
-    return video;
+      const cost = calculateVideoCost(model, size, seconds);
+
+      const video: Video = {
+        id: videoId,
+        user_id: userId,
+        openai_video_id: openaiVideo.id,
+        prompt,
+        model,
+        size,
+        seconds,
+        status: openaiVideo.status as any,
+        progress: openaiVideo.progress || 0,
+        created_at: openaiVideo.created_at,
+        has_input_reference: !!inputReferencePath,
+        cost
+      };
+
+      this.db.createVideo(video);
+      this.startPolling(videoId);
+
+      return video;
+    } finally {
+      // Clean up processed image
+      if (processedImagePath) {
+        await cleanupTempImage(processedImagePath);
+      }
+    }
   }
 
   async remixVideo(
@@ -180,18 +195,24 @@ export class VideoService {
       throw new Error('Failed to extract last frame from video');
     }
 
-    // Create new video using the extracted frame as reference
-    const videoModel = model || originalVideo.model;
-    const videoDuration = seconds || originalVideo.seconds;
-    
-    return this.createVideo(
-      userId,
-      prompt,
-      videoModel as any,
-      originalVideo.size,
-      videoDuration,
-      framePath
-    );
+    try {
+      // Create new video using the extracted frame as reference
+      // The frame will be processed (resized and padded) by createVideo
+      const videoModel = model || originalVideo.model;
+      const videoDuration = seconds || originalVideo.seconds;
+      
+      return await this.createVideo(
+        userId,
+        prompt,
+        videoModel as any,
+        originalVideo.size,
+        videoDuration,
+        framePath
+      );
+    } finally {
+      // Clean up the extracted frame after use
+      await cleanupTempImage(framePath);
+    }
   }
 
   async getVideoStatus(videoId: string): Promise<Video | null> {
