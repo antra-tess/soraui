@@ -31,6 +31,17 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
     try {
       const { prompt, model = 'sora-2', size = '1280x720', seconds = '8' } = req.body;
 
+      console.log('=== CREATE VIDEO REQUEST ===');
+      console.log('Body:', { prompt: prompt?.substring(0, 50), model, size, seconds });
+      console.log('File received:', req.file ? {
+        fieldname: req.file.fieldname,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path
+      } : 'NO FILE');
+      console.log('===========================');
+
       if (!prompt) {
         return res.status(400).json({ error: 'Prompt is required' });
       }
