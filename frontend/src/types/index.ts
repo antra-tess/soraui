@@ -3,12 +3,18 @@ export interface User {
   username: string
 }
 
+export type SoraModel = 'sora-2' | 'sora-2-pro'
+export type VeoModel = 'veo-3.1-generate-preview' | 'veo-3.1-fast-generate-preview' | 'veo-3-generate-preview' | 'veo-3-fast-generate-preview'
+export type VideoModel = SoraModel | VeoModel
+
 export interface Video {
   id: string
   user_id: string
-  openai_video_id: string
+  provider: 'sora' | 'veo'
+  provider_video_id: string
+  openai_video_id?: string
   prompt: string
-  model: 'sora-2' | 'sora-2-pro'
+  model: VideoModel
   size: string
   seconds: string
   status: 'queued' | 'in_progress' | 'completed' | 'failed'
@@ -19,15 +25,19 @@ export interface Video {
   thumbnail_path?: string
   error_message?: string
   has_input_reference?: boolean
+  has_audio?: boolean
+  reference_image_paths?: string
   remix_of?: string
   cost?: number
 }
 
 export interface VideoCreateRequest {
   prompt: string
-  model: 'sora-2' | 'sora-2-pro'
+  model: VideoModel
   size?: string
   seconds?: string
+  resolution?: string
+  negativePrompt?: string
   input_reference?: File
 }
 

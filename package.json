@@ -10,11 +10,16 @@
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "build:all": "cd backend && npm run build && cd ../frontend && npm run build"
   },
-  "keywords": ["sora", "video-generation", "openai", "vue", "express"],
+  "keywords": [
+    "sora",
+    "video-generation",
+    "openai",
+    "vue",
+    "express"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
   }
 }
-

@@ -22,7 +22,12 @@ export const useWebSocketStore = defineStore('websocket', () => {
       return
     }
 
-    const wsUrl = import.meta.env.VITE_WS_URL || window.location.origin
+    // In development, connect to backend on port 3000
+    // In production, connect to same origin
+    const wsUrl = import.meta.env.VITE_WS_URL || 
+                  (import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin)
+    
+    console.log('Connecting to WebSocket:', wsUrl)
     
     socket.value = io(wsUrl, {
       auth: {

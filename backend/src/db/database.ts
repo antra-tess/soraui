@@ -41,13 +41,16 @@ export class VideoDatabase {
     
     this.db.run(`
       INSERT INTO videos (
-        id, user_id, openai_video_id, prompt, model, size, seconds,
-        status, progress, created_at, has_input_reference, remix_of, cost
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, user_id, provider, provider_video_id, openai_video_id, 
+        prompt, model, size, seconds, status, progress, created_at, 
+        has_input_reference, has_audio, reference_image_paths, remix_of, cost
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       video.id,
       video.user_id,
-      video.openai_video_id,
+      video.provider,
+      video.provider_video_id,
+      video.openai_video_id || video.provider_video_id, // Backwards compat
       video.prompt,
       video.model,
       video.size,
@@ -56,6 +59,8 @@ export class VideoDatabase {
       video.progress,
       video.created_at,
       video.has_input_reference ? 1 : 0,
+      video.has_audio ? 1 : 0,
+      video.reference_image_paths || null,
       video.remix_of || null,
       video.cost || 0
     ]);
@@ -125,6 +130,15 @@ export class VideoDatabase {
     return this.mapRowToVideo(result[0].columns, result[0].values[0]);
   }
 
+  getVideoByProviderVideoId(providerVideoId: string): Video | null {
+    if (!this.db) throw new Error('Database not initialized');
+    
+    const result = this.db.exec('SELECT * FROM videos WHERE provider_video_id = ?', [providerVideoId]);
+    if (result.length === 0 || result[0].values.length === 0) return null;
+    
+    return this.mapRowToVideo(result[0].columns, result[0].values[0]);
+  }
+
   getCostStats(userId: string): CostStats {
     if (!this.db) throw new Error('Database not initialized');
     
@@ -162,7 +176,9 @@ export class VideoDatabase {
     return {
       id: row.id,
       user_id: row.user_id,
-      openai_video_id: row.openai_video_id,
+      provider: row.provider || 'sora', // Default for old records
+      provider_video_id: row.provider_video_id || row.openai_video_id, // Fallback
+      openai_video_id: row.openai_video_id, // Backwards compat
       prompt: row.prompt,
       model: row.model,
       size: row.size,
@@ -175,6 +191,8 @@ export class VideoDatabase {
       thumbnail_path: row.thumbnail_path,
       error_message: row.error_message,
       has_input_reference: row.has_input_reference === 1,
+      has_audio: row.has_audio === 1,
+      reference_image_paths: row.reference_image_paths,
       remix_of: row.remix_of,
       cost: row.cost || 0
     };

@@ -20,6 +20,7 @@ dotenv.config();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret_in_production';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY; // Optional - for Veo support
 
 // Use absolute paths for Railway volume mounting
 // Railway mounts volume at /app/storage but runs from /app/backend
@@ -32,6 +33,12 @@ const USERS_FILE = process.env.USERS_FILE || `${storageBase}/data/users.json`;
 if (!OPENAI_API_KEY) {
   console.error('OPENAI_API_KEY environment variable is required');
   process.exit(1);
+}
+
+if (GOOGLE_API_KEY) {
+  console.log('✅ Google API key configured - Veo models enabled');
+} else {
+  console.log('⚠️  Google API key not configured - Veo models disabled');
 }
 
 // Debug: Log working directory and paths
@@ -57,7 +64,7 @@ if (!existsSync(VIDEOS_DIR)) {
 // Initialize services
 const db = new VideoDatabase(DATABASE_PATH);
 const userManager = new UserManager(USERS_FILE);
-const videoService = new VideoService(OPENAI_API_KEY, db, VIDEOS_DIR);
+const videoService = new VideoService(OPENAI_API_KEY, db, VIDEOS_DIR, GOOGLE_API_KEY);
 
 // Initialize database (async)
 await db.initialize();
@@ -162,9 +169,11 @@ if (process.env.NODE_ENV === 'production') {
 
 // WebSocket authentication and connection handling
 io.use((socket, next) => {
+  console.log('WebSocket auth attempt:', socket.handshake.auth);
   const token = socket.handshake.auth.token;
   
   if (!token) {
+    console.error('WebSocket auth failed: No token provided');
     return next(new Error('Authentication error'));
   }
 
@@ -173,13 +182,16 @@ io.use((socket, next) => {
     const user = userManager.getUserById(decoded.userId);
     
     if (!user) {
+      console.error('WebSocket auth failed: User not found');
       return next(new Error('Authentication error'));
     }
 
     (socket as any).userId = user.id;
     (socket as any).username = user.username;
+    console.log(`WebSocket auth successful: ${user.username}`);
     next();
   } catch (error) {
+    console.error('WebSocket auth failed:', error);
     next(new Error('Authentication error'));
   }
 });

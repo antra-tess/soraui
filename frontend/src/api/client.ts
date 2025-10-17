@@ -102,6 +102,11 @@ class ApiClient {
     const response = await this.client.post(`/videos/${videoId}/check-status`)
     return response.data
   }
+
+  async getReferenceImages(videoId: string) {
+    const response = await this.client.get(`/videos/${videoId}/reference-images`)
+    return response.data
+  }
 }
 
 export const apiClient = new ApiClient()

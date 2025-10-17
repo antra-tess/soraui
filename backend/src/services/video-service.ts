@@ -1,6 +1,6 @@
 import { VideoDatabase } from '../db/database';
 import { Video, CostStats } from '../types';
-import { createWriteStream, mkdirSync, existsSync, createReadStream } from 'fs';
+import { createWriteStream, mkdirSync, existsSync, createReadStream, copyFileSync } from 'fs';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
 import axios from 'axios';
@@ -8,24 +8,51 @@ import FormData from 'form-data';
 import { calculateVideoCost } from '../utils/cost-calculator';
 import { extractLastFrame } from '../utils/video-utils';
 import { resizeAndPadImage, cleanupTempImage } from '../utils/image-utils';
+import { ProviderFactory, ProviderType } from '../providers/provider-factory';
+import { BaseVideoProvider } from '../providers/base-provider';
 
 export class VideoService {
-  private apiKey: string;
+  private apiKeys: { openai: string; google?: string };
   private db: VideoDatabase;
   private videosDir: string;
   private pollingJobs: Map<string, NodeJS.Timeout>;
   private baseURL = 'https://api.openai.com/v1';
 
-  constructor(openaiApiKey: string, db: VideoDatabase, videosDir: string) {
-    this.apiKey = openaiApiKey;
+  constructor(
+    openaiApiKey: string, 
+    db: VideoDatabase, 
+    videosDir: string,
+    googleApiKey?: string
+  ) {
+    this.apiKeys = { 
+      openai: openaiApiKey,
+      google: googleApiKey 
+    };
     this.db = db;
     this.videosDir = videosDir;
     this.pollingJobs = new Map();
 
-    // Ensure videos directory exists
+    // Ensure directories exist
     if (!existsSync(videosDir)) {
       mkdirSync(videosDir, { recursive: true });
     }
+    
+    // Create reference-images subdirectory
+    const refImagesDir = join(videosDir, 'reference-images');
+    if (!existsSync(refImagesDir)) {
+      mkdirSync(refImagesDir, { recursive: true });
+    }
+  }
+
+  private getProvider(model: string): BaseVideoProvider {
+    const providerType = ProviderFactory.getProviderTypeFromModel(model);
+    const apiKey = providerType === 'sora' ? this.apiKeys.openai : this.apiKeys.google!;
+    
+    if (!apiKey) {
+      throw new Error(`API key not configured for provider: ${providerType}`);
+    }
+
+    return ProviderFactory.createProvider(providerType, apiKey, this.videosDir);
   }
 
   async resumePolling(): Promise<void> {
@@ -44,7 +71,7 @@ export class VideoService {
 
   private get headers() {
     return {
-      'Authorization': `Bearer ${this.apiKey}`,
+      'Authorization': `Bearer ${this.apiKeys.openai}`,
       'Content-Type': 'application/json'
     };
   }
@@ -52,62 +79,117 @@ export class VideoService {
   async createVideo(
     userId: string,
     prompt: string,
-    model: 'sora-2' | 'sora-2-pro',
+    model: string,
     size: string = '1280x720',
     seconds: string = '8',
-    inputReferencePath?: string
+    inputReferencePath?: string,
+    negativePrompt?: string,
+    resolution?: string,
+    generateAudio: boolean = true,
+    personGeneration?: 'allow_all' | 'allow_adult' | 'dont_allow',
+    referenceImagePaths?: string[],
+    lastFramePath?: string
   ): Promise<Video> {
     const videoId = randomUUID();
     let processedImagePath: string | undefined;
+    let processedReferenceImages: string[] = [];
+    let processedLastFrame: string | undefined;
 
     try {
-      // Process the input image if provided
+      // Get the appropriate provider
+      const provider = this.getProvider(model);
+      const providerType = ProviderFactory.getProviderTypeFromModel(model);
+
+      // Process the input image if provided (for Sora/Veo single image)
       if (inputReferencePath) {
         console.log(`Processing uploaded image for video ${videoId}, target size: ${size}`);
         processedImagePath = await resizeAndPadImage(inputReferencePath, size);
       }
 
-      // Create video with OpenAI Sora API
-      const formData = new FormData();
-      formData.append('model', model);
-      formData.append('prompt', prompt);
-      formData.append('size', size);
-      formData.append('seconds', seconds);
-
-      if (processedImagePath) {
-        console.log(`Adding processed image to FormData: ${processedImagePath}`);
-        formData.append('input_reference', createReadStream(processedImagePath));
+      // Process reference images for Veo (up to 3)
+      if (referenceImagePaths && referenceImagePaths.length > 0) {
+        console.log(`Processing ${referenceImagePaths.length} reference images for Veo video ${videoId}`);
+        processedReferenceImages = await Promise.all(
+          referenceImagePaths.map(path => resizeAndPadImage(path, size))
+        );
       }
 
-      console.log('Sending video creation request to OpenAI...');
-      console.log(`Model: ${model}, Size: ${size}, Seconds: ${seconds}`);
-      console.log(`Has input_reference: ${!!processedImagePath}`);
+      // Process last frame for Veo interpolation
+      if (lastFramePath) {
+        console.log(`Processing last frame for Veo interpolation video ${videoId}`);
+        processedLastFrame = await resizeAndPadImage(lastFramePath, size);
+      }
 
-      const response = await axios.post(`${this.baseURL}/videos`, formData, {
-        headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          ...formData.getHeaders()
-        }
+      // Convert size format (e.g., "1280x720" -> "16:9")
+      const aspectRatio = this.sizeToAspectRatio(size);
+
+      // Create video using provider
+      const providerResponse = await provider.createVideo({
+        prompt,
+        model,
+        size, // For Sora (e.g., "1280x720")
+        aspectRatio, // For Veo (e.g., "16:9")
+        duration: seconds,
+        resolution,
+        negativePrompt,
+        inputReferencePath: processedImagePath,
+        lastFramePath: processedLastFrame,
+        referenceImagePaths: processedReferenceImages.length > 0 ? processedReferenceImages : undefined,
+        generateAudio,
+        personGeneration,
       });
 
-      const openaiVideo = response.data;
-      
-      console.log('OpenAI response:', JSON.stringify(openaiVideo, null, 2));
+      const cost = calculateVideoCost(model, size, seconds, generateAudio);
 
-      const cost = calculateVideoCost(model, size, seconds);
+      // Save all reference/input images permanently for gallery display
+      let savedRefImagePaths: string[] = [];
+      
+      // Save style reference images (Veo reference-images mode)
+      if (processedReferenceImages.length > 0) {
+        processedReferenceImages.forEach((tempPath, index) => {
+          const permanentPath = join(this.videosDir, 'reference-images', `${videoId}_styleref${index}.jpg`);
+          copyFileSync(tempPath, permanentPath);
+          savedRefImagePaths.push(permanentPath);
+        });
+        console.log(`Saved ${processedReferenceImages.length} style reference images`);
+      }
+      
+      // Save first frame (Veo image-to-video or interpolation)
+      if (processedImagePath) {
+        const permanentPath = join(this.videosDir, 'reference-images', `${videoId}_first.jpg`);
+        copyFileSync(processedImagePath, permanentPath);
+        savedRefImagePaths.push(permanentPath);
+        console.log(`Saved first frame image`);
+      }
+      
+      // Save last frame (Veo interpolation)
+      if (processedLastFrame) {
+        const permanentPath = join(this.videosDir, 'reference-images', `${videoId}_last.jpg`);
+        copyFileSync(processedLastFrame, permanentPath);
+        savedRefImagePaths.push(permanentPath);
+        console.log(`Saved last frame image`);
+      }
+      
+      if (savedRefImagePaths.length > 0) {
+        console.log(`Total ${savedRefImagePaths.length} reference images saved for video ${videoId}`);
+      }
 
       const video: Video = {
         id: videoId,
         user_id: userId,
-        openai_video_id: openaiVideo.id,
+        provider: providerType,
+        provider_video_id: providerResponse.id,
+        openai_video_id: providerType === 'sora' ? providerResponse.id : undefined,
         prompt,
         model,
         size,
         seconds,
-        status: openaiVideo.status as any,
-        progress: openaiVideo.progress || 0,
-        created_at: openaiVideo.created_at,
-        has_input_reference: !!inputReferencePath,
+        status: providerResponse.status,
+        progress: providerResponse.progress,
+        created_at: providerResponse.created_at,
+        has_input_reference: !!inputReferencePath || processedReferenceImages.length > 0,
+        has_audio: providerType === 'veo' ? generateAudio : undefined,
+        reference_image_paths: savedRefImagePaths.length > 0 ? JSON.stringify(savedRefImagePaths) : undefined,
         cost
       };
 
@@ -116,10 +198,29 @@ export class VideoService {
 
       return video;
     } finally {
-      // Clean up processed image
+      // Clean up temp processed images
       if (processedImagePath) {
         await cleanupTempImage(processedImagePath);
       }
+      if (processedLastFrame) {
+        await cleanupTempImage(processedLastFrame);
+      }
+      for (const imagePath of processedReferenceImages) {
+        await cleanupTempImage(imagePath);
+      }
+    }
+  }
+
+  private sizeToAspectRatio(size: string): string {
+    // Convert size strings to aspect ratios
+    // 1280x720, 1920x1080 -> 16:9
+    // 720x1280, 1080x1920 -> 9:16
+    const [width, height] = size.split('x').map(Number);
+    
+    if (width > height) {
+      return '16:9';
+    } else {
+      return '9:16';
     }
   }
 
@@ -137,30 +238,35 @@ export class VideoService {
       throw new Error('Not authorized to remix this video');
     }
 
+    // Get the provider
+    const provider = this.getProvider(originalVideo.model);
+    const providerType = ProviderFactory.getProviderTypeFromModel(originalVideo.model);
+
+    // Check if provider supports remix
+    if (!provider.remixVideo) {
+      throw new Error(`${providerType} does not support video remixing`);
+    }
+
     const videoId = randomUUID();
 
-    // Create remix with OpenAI
-    const response = await axios.post(
-      `${this.baseURL}/videos/${originalVideo.openai_video_id}/remix`,
-      { prompt },
-      { headers: this.headers }
-    );
-
-    const openaiVideo = response.data;
+    // Create remix using provider
+    const providerResponse = await provider.remixVideo(originalVideo.provider_video_id, prompt);
 
     const cost = calculateVideoCost(originalVideo.model, originalVideo.size, originalVideo.seconds);
 
     const video: Video = {
       id: videoId,
       user_id: userId,
-      openai_video_id: openaiVideo.id,
+      provider: providerType,
+      provider_video_id: providerResponse.id,
+      openai_video_id: providerType === 'sora' ? providerResponse.id : undefined,
       prompt,
       model: originalVideo.model,
       size: originalVideo.size,
       seconds: originalVideo.seconds,
-      status: openaiVideo.status as any,
-      progress: openaiVideo.progress || 0,
-      created_at: openaiVideo.created_at,
+      status: providerResponse.status,
+      progress: providerResponse.progress,
+      created_at: providerResponse.created_at,
       remix_of: originalVideoId,
       cost
     };
@@ -175,7 +281,7 @@ export class VideoService {
     userId: string,
     originalVideoId: string,
     prompt: string,
-    model?: 'sora-2' | 'sora-2-pro',
+    model?: string,
     seconds?: string
   ): Promise<Video> {
     const originalVideo = this.db.getVideo(originalVideoId);
@@ -191,34 +297,72 @@ export class VideoService {
       throw new Error('Original video must be completed');
     }
 
-    // Extract last frame from the video
-    const frameId = randomUUID();
-    const framePath = join(this.videosDir, `${frameId}_lastframe.jpg`);
-    
-    try {
-      await extractLastFrame(originalVideo.file_path, framePath);
-    } catch (error) {
-      console.error('Error extracting last frame:', error);
-      throw new Error('Failed to extract last frame from video');
-    }
+    const videoModel = model || originalVideo.model;
+    const videoDuration = seconds || originalVideo.seconds;
+    const provider = this.getProvider(videoModel);
+    const providerType = ProviderFactory.getProviderTypeFromModel(videoModel);
 
-    try {
-      // Create new video using the extracted frame as reference
-      // The frame will be processed (resized and padded) by createVideo
-      const videoModel = model || originalVideo.model;
-      const videoDuration = seconds || originalVideo.seconds;
+    // Check if provider supports native extension (Veo does, Sora doesn't)
+    if (provider.extendVideo && originalVideo.provider === providerType) {
+      // Use native extension (for Veo)
+      console.log(`Using native extension for ${providerType} video`);
       
-      return await this.createVideo(
-        userId,
+      const videoId = randomUUID();
+      const extensionResponse = await provider.extendVideo(
+        originalVideo.provider_video_id,
         prompt,
-        videoModel as any,
-        originalVideo.size,
-        videoDuration,
-        framePath
+        videoDuration
       );
-    } finally {
-      // Clean up the extracted frame after use
-      await cleanupTempImage(framePath);
+
+      const cost = calculateVideoCost(videoModel, originalVideo.size, videoDuration, originalVideo.has_audio !== false);
+
+      const video: Video = {
+        id: videoId,
+        user_id: userId,
+        provider: providerType,
+        provider_video_id: extensionResponse.id,
+        openai_video_id: providerType === 'sora' ? extensionResponse.id : undefined,
+        prompt,
+        model: videoModel,
+        size: originalVideo.size,
+        seconds: videoDuration,
+        status: extensionResponse.status,
+        progress: extensionResponse.progress,
+        created_at: extensionResponse.created_at,
+        has_audio: originalVideo.has_audio,
+        cost
+      };
+
+      this.db.createVideo(video);
+      this.startPolling(videoId);
+
+      return video;
+    } else {
+      // Use last-frame approach (for Sora or cross-provider continuation)
+      const frameId = randomUUID();
+      const framePath = join(this.videosDir, `${frameId}_lastframe.jpg`);
+      
+      try {
+        await extractLastFrame(originalVideo.file_path, framePath);
+      } catch (error) {
+        console.error('Error extracting last frame:', error);
+        throw new Error('Failed to extract last frame from video');
+      }
+
+      try {
+        // Create new video using the extracted frame as reference
+        return await this.createVideo(
+          userId,
+          prompt,
+          videoModel as any,
+          originalVideo.size,
+          videoDuration,
+          framePath
+        );
+      } finally {
+        // Clean up the extracted frame after use
+        await cleanupTempImage(framePath);
+      }
     }
   }
 
@@ -315,41 +459,39 @@ export class VideoService {
         return;
       }
 
-      // Get status from OpenAI
-      const response = await axios.get(
-        `${this.baseURL}/videos/${video.openai_video_id}`,
-        { headers: this.headers }
-      );
-      const openaiVideo = response.data;
+      // Get the appropriate provider
+      const provider = this.getProvider(video.model);
+
+      // Get status from provider
+      const providerResponse = await provider.getVideoStatus(video.provider_video_id);
 
       // Log raw API response only for forced checks
       if (isForceCheck) {
-        console.log('--- RAW OPENAI API RESPONSE ---');
-        console.log(JSON.stringify(openaiVideo, null, 2));
+        console.log('--- RAW PROVIDER API RESPONSE ---');
+        console.log(JSON.stringify(providerResponse, null, 2));
         console.log('--- END RAW RESPONSE ---');
       }
 
       const updates: Partial<Video> = {
-        status: openaiVideo.status as any,
-        progress: openaiVideo.progress || video.progress
+        status: providerResponse.status,
+        progress: providerResponse.progress
       };
 
-      if (openaiVideo.status === 'completed') {
-        // Download the video
+      if (providerResponse.status === 'completed') {
+        // Download the video using provider
         try {
-          const videoPath = await this.downloadVideo(video.openai_video_id, videoId);
-          const thumbnailPath = await this.downloadThumbnail(video.openai_video_id, videoId);
+          const downloadResult = await provider.downloadVideo(video.provider_video_id, videoId);
           
-          updates.file_path = videoPath;
-          updates.thumbnail_path = thumbnailPath;
+          updates.file_path = downloadResult.videoPath;
+          updates.thumbnail_path = downloadResult.thumbnailPath;
           updates.completed_at = Date.now();
         } catch (error) {
           console.error(`Error downloading video ${videoId}:`, error);
           updates.status = 'failed';
           updates.error_message = 'Failed to download video';
         }
-      } else if (openaiVideo.status === 'failed') {
-        updates.error_message = (openaiVideo as any).error?.message || 'Video generation failed';
+      } else if (providerResponse.status === 'failed') {
+        updates.error_message = providerResponse.error || 'Video generation failed';
       }
 
       this.db.updateVideo(videoId, updates);

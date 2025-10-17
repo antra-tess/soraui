@@ -22,6 +22,30 @@
       <v-icon size="64" color="white">{{ statusIcon }}</v-icon>
     </v-img>
 
+    <!-- Reference images thumbnails -->
+    <v-card-text v-if="referenceImages.length > 0" class="pa-2">
+      <div class="text-caption text-grey mb-1">Reference Images:</div>
+      <div class="d-flex gap-1">
+        <v-img
+          v-for="(img, index) in referenceImages"
+          :key="index"
+          :src="`data:${img.mimeType};base64,${img.data}`"
+          height="60"
+          width="60"
+          cover
+          class="rounded"
+        >
+          <v-chip
+            size="x-small"
+            color="purple"
+            class="ma-1"
+          >
+            {{ index + 1 }}
+          </v-chip>
+        </v-img>
+      </div>
+    </v-card-text>
+
     <v-card-title class="text-wrap">
       <div class="prompt-text">
         <div :class="{ 'prompt-collapsed': !promptExpanded && isLongPrompt }">
@@ -42,6 +66,10 @@
   <v-card-subtitle>
     <v-chip size="small" :color="modelColor" class="mr-1">
       {{ video.model }}
+    </v-chip>
+    <v-chip v-if="video.has_audio" size="small" color="purple" variant="tonal" class="mr-1">
+      <v-icon start size="small">mdi-volume-high</v-icon>
+      Audio
     </v-chip>
     <v-chip size="small" class="mr-1">
       {{ video.size }}
@@ -142,16 +170,29 @@
 
           <v-divider v-if="video.status === 'completed' || video.status === 'in_progress' || video.status === 'queued'" />
 
+          <!-- Use as Template -->
+          <v-list-item
+            @click="$emit('useAsTemplate', video)"
+          >
+            <template v-slot:prepend>
+              <v-icon>mdi-content-copy</v-icon>
+            </template>
+            <v-list-item-title>Use as Template</v-list-item-title>
+            <v-list-item-subtitle>Copy settings to new video</v-list-item-subtitle>
+          </v-list-item>
+
+          <v-divider />
+
           <!-- Remix -->
           <v-list-item
-            v-if="video.status === 'completed'"
+            v-if="video.status === 'completed' && video.provider === 'sora'"
             @click="$emit('remix', video)"
           >
             <template v-slot:prepend>
               <v-icon>mdi-auto-fix</v-icon>
             </template>
             <v-list-item-title>Remix</v-list-item-title>
-            <v-list-item-subtitle>Modify this video</v-list-item-subtitle>
+            <v-list-item-subtitle>Modify this video (Sora only)</v-list-item-subtitle>
           </v-list-item>
 
           <!-- Continue -->
@@ -202,7 +243,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import type { Video } from '@/types'
 import { apiClient } from '@/api/client'
 
@@ -216,14 +257,31 @@ const emit = defineEmits<{
   play: [video: Video]
   continue: [video: Video]
   statusUpdated: [video: Video]
+  useAsTemplate: [video: Video]
 }>()
 
 const promptExpanded = ref(false)
 const checkingStatus = ref(false)
+const referenceImages = ref<Array<{ data: string; mimeType: string }>>([])
 const snackbar = ref({
   show: false,
   message: '',
   color: 'success'
+})
+
+// Load reference images if available
+onMounted(async () => {
+  if (props.video.has_input_reference && props.video.status === 'completed') {
+    try {
+      const response = await apiClient.getReferenceImages(props.video.id)
+      if (response.images && response.images.length > 0) {
+        referenceImages.value = response.images
+      }
+    } catch (error) {
+      // Silently fail - reference images are optional to display
+      console.log('Could not load reference images:', error)
+    }
+  }
 })
 
 const handleForceCheck = async () => {

@@ -29,7 +29,10 @@
       <v-container fluid>
         <v-row>
           <v-col cols="12" md="8">
-            <CreateVideoCard @video-created="handleVideoCreated" />
+            <CreateVideoCard 
+              ref="createVideoCard"
+              @video-created="handleVideoCreated" 
+            />
           </v-col>
           <v-col cols="12" md="4">
             <CostStatsCard ref="costStatsCard" />
@@ -83,6 +86,7 @@
               @play="handlePlay"
               @continue="handleContinue"
               @status-updated="handleStatusUpdated"
+              @use-as-template="handleUseAsTemplate"
             />
           </v-col>
         </v-row>
@@ -132,6 +136,7 @@ const authStore = useAuthStore()
 const videosStore = useVideosStore()
 const wsStore = useWebSocketStore()
 
+const createVideoCard = ref<any>(null)
 const remixDialog = ref(false)
 const remixVideo = ref<Video | null>(null)
 const playerDialog = ref(false)
@@ -164,6 +169,15 @@ function handleVideoCreated() {
 function handleStatusUpdated(updatedVideo: Video) {
   // Update the video in the store with the new status
   videosStore.setFullVideo(updatedVideo)
+}
+
+function handleUseAsTemplate(video: Video) {
+  // Populate the create form with settings from this video
+  if (createVideoCard.value && createVideoCard.value.loadTemplate) {
+    createVideoCard.value.loadTemplate(video)
+    // Scroll to the top to show the form
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 }
 
 async function handleDelete(video: Video) {

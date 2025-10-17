@@ -11,7 +11,7 @@ import { extractVideoFrames } from '../utils/video-utils';
 const upload = multer({
   dest: 'uploads/',
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB limit
+    fileSize: 10 * 1024 * 1024 // 10MB limit per file
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
@@ -23,34 +23,71 @@ const upload = multer({
   }
 });
 
+// Support multiple images with different field names
+const uploadFields = multer({
+  dest: 'uploads/',
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB per file
+    files: 5 // Max 5 files (3 reference + 1 first + 1 last)
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, and WebP are allowed.'));
+    }
+  }
+}).fields([
+  { name: 'input_reference', maxCount: 1 },     // Sora or Veo image-to-video
+  { name: 'reference_images', maxCount: 3 },     // Veo style references
+  { name: 'first_frame', maxCount: 1 },          // Veo interpolation first
+  { name: 'last_frame', maxCount: 1 }            // Veo interpolation last
+]);
+
 export function createVideosRouter(videoService: VideoService, videosDir: string, jwtSecret: string): Router {
   const router = Router();
 
-  // Create a new video
-  router.post('/', upload.single('input_reference'), async (req: AuthRequest, res) => {
+  // Create a new video - use appropriate upload handler
+  const createVideoHandler = async (req: AuthRequest, res: any) => {
     try {
-      const { prompt, model = 'sora-2', size = '1280x720', seconds = '8' } = req.body;
+      const { 
+        prompt, 
+        model = 'sora-2', 
+        size = '1280x720', 
+        seconds = '8', 
+        negativePrompt, 
+        resolution,
+        generateAudio,
+        personGeneration,
+        veoImageMode
+      } = req.body;
+
+      const fileFields = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
 
       console.log('=== CREATE VIDEO REQUEST ===');
-      console.log('Body:', { prompt: prompt?.substring(0, 50), model, size, seconds });
-      console.log('File received:', req.file ? {
-        fieldname: req.file.fieldname,
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size,
-        path: req.file.path
-      } : 'NO FILE');
+      console.log('Body:', { prompt: prompt?.substring(0, 50), model, size, seconds, veoImageMode, generateAudio });
+      console.log('Files:', fileFields ? Object.keys(fileFields).map(key => ({
+        field: key,
+        count: fileFields[key].length,
+        files: fileFields[key].map(f => f.originalname)
+      })) : 'NO FILES');
       console.log('===========================');
 
       if (!prompt) {
         return res.status(400).json({ error: 'Prompt is required' });
       }
 
-      if (!['sora-2', 'sora-2-pro'].includes(model)) {
-        return res.status(400).json({ error: 'Invalid model. Use sora-2 or sora-2-pro' });
+      // Extract files based on field names and Veo image mode
+      let inputReferencePath = fileFields?.input_reference?.[0]?.path;
+      const referenceImagePaths = fileFields?.reference_images?.map(f => f.path);
+      const firstFramePath = fileFields?.first_frame?.[0]?.path;
+      const lastFramePath = fileFields?.last_frame?.[0]?.path;
+      
+      // For interpolation, use first_frame as inputReference
+      if (firstFramePath && !inputReferencePath) {
+        inputReferencePath = firstFramePath;
       }
-
-      const inputReferencePath = req.file ? req.file.path : undefined;
 
       const video = await videoService.createVideo(
         req.user!.id,
@@ -58,7 +95,13 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
         model,
         size,
         seconds,
-        inputReferencePath
+        inputReferencePath,
+        negativePrompt,
+        resolution,
+        generateAudio !== 'false' && generateAudio !== false, // Default true
+        personGeneration, // Will be determined by provider based on image usage
+        referenceImagePaths,
+        lastFramePath
       );
 
       res.json(video);
@@ -66,7 +109,10 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
       console.error('Error creating video:', error);
       res.status(500).json({ error: error.message || 'Failed to create video' });
     }
-  });
+  };
+
+  // Use uploadFields for all video creation to support all image modes
+  router.post('/', uploadFields, createVideoHandler);
 
   // Remix a video
   router.post('/:videoId/remix', async (req: AuthRequest, res) => {
@@ -182,9 +228,46 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
         return res.status(404).json({ error: 'File not found' });
       }
 
-      res.setHeader('Content-Type', contentType);
-      const stream = createReadStream(filePath);
-      stream.pipe(res);
+      // For video files, support range requests (required for Safari)
+      if (variant === 'video') {
+        const { statSync } = await import('fs');
+        const stat = statSync(filePath);
+        const fileSize = stat.size;
+        const range = req.headers.range;
+
+        if (range) {
+          // Parse Range header
+          const parts = range.replace(/bytes=/, "").split("-");
+          const start = parseInt(parts[0], 10);
+          const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+          const chunksize = (end - start) + 1;
+
+          res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunksize,
+            'Content-Type': contentType,
+          });
+
+          const stream = createReadStream(filePath, { start, end });
+          stream.pipe(res);
+        } else {
+          // No range request - send full file
+          res.writeHead(200, {
+            'Content-Length': fileSize,
+            'Content-Type': contentType,
+            'Accept-Ranges': 'bytes',
+          });
+
+          const stream = createReadStream(filePath);
+          stream.pipe(res);
+        }
+      } else {
+        // For thumbnails, just stream normally
+        res.setHeader('Content-Type', contentType);
+        const stream = createReadStream(filePath);
+        stream.pipe(res);
+      }
     } catch (error: any) {
       console.error('Error downloading video:', error);
       res.status(500).json({ error: error.message || 'Failed to download video' });
@@ -205,6 +288,52 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
     } catch (error: any) {
       console.error('Error deleting video:', error);
       res.status(500).json({ error: error.message || 'Failed to delete video' });
+    }
+  });
+
+  // Get reference images for a video
+  router.get('/:videoId/reference-images', async (req: AuthRequest, res) => {
+    try {
+      const { videoId } = req.params;
+      const video = await videoService.getVideoStatus(videoId);
+
+      if (!video) {
+        return res.status(404).json({ error: 'Video not found' });
+      }
+
+      if (video.user_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Not authorized' });
+      }
+
+      if (!video.reference_image_paths) {
+        return res.json({ images: [] });
+      }
+
+      const imagePaths = JSON.parse(video.reference_image_paths);
+      const images = await Promise.all(
+        imagePaths.map(async (path: string, index: number) => {
+          if (existsSync(path)) {
+            const data = await readFile(path);
+            // Extract meaningful filename from path (e.g., videoId_first.jpg, videoId_styleref0.jpg)
+            const pathParts = path.split('/');
+            const filename = pathParts[pathParts.length - 1];
+            return {
+              index,
+              filename: filename,
+              data: data.toString('base64'),
+              mimeType: 'image/jpeg'
+            };
+          }
+          return null;
+        })
+      );
+
+      res.json({ 
+        images: images.filter(img => img !== null)
+      });
+    } catch (error: any) {
+      console.error('Error getting reference images:', error);
+      res.status(500).json({ error: error.message || 'Failed to get reference images' });
     }
   });
 

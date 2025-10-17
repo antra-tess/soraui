@@ -3,13 +3,21 @@
     <v-card>
       <v-card-title>
         <v-icon class="mr-2">mdi-video-plus-outline</v-icon>
-        Continue from Last Frame
+        {{ isVeoVideo ? 'Extend Video' : 'Continue from Last Frame' }}
       </v-card-title>
 
       <v-card-text v-if="video">
         <v-alert type="info" variant="tonal" class="mb-4">
-          Creating a new video starting from the last frame of:
-          <br><strong>{{ video.prompt }}</strong>
+          <div v-if="isVeoVideo">
+            <v-icon start color="purple">mdi-video-plus</v-icon>
+            <strong>Native Video Extension (Veo)</strong>
+            <br>Extending the original video by {{ seconds || video.seconds }} seconds
+            <br>Original: <strong>{{ video.prompt }}</strong>
+          </div>
+          <div v-else>
+            Creating a new video starting from the last frame of:
+            <br><strong>{{ video.prompt }}</strong>
+          </div>
         </v-alert>
 
         <v-textarea
@@ -18,7 +26,7 @@
           placeholder="Describe what happens after the previous video..."
           rows="3"
           :disabled="loading"
-          hint="The last frame will be used as the first frame of the new video"
+          :hint="isVeoVideo ? 'Veo will seamlessly extend the original video' : 'The last frame will be used as the first frame of the new video'"
           persistent-hint
           counter
         />
@@ -64,7 +72,7 @@
           :disabled="!continuePrompt.trim()"
         >
           <v-icon start>mdi-video-plus-outline</v-icon>
-          Continue Video
+          {{ isVeoVideo ? 'Extend Video' : 'Continue Video' }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -72,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type { Video } from '@/types'
 
 const props = defineProps<{
@@ -90,18 +98,42 @@ const model = ref<string>('')
 const seconds = ref<string>('')
 const loading = ref(false)
 
-const modelOptions = [
-  { title: 'Same as Original', value: '' },
-  { title: 'Sora 2', value: 'sora-2' },
-  { title: 'Sora 2 Pro', value: 'sora-2-pro' }
-]
+const isVeoVideo = computed(() => props.video?.provider === 'veo')
 
-const durationOptions = [
-  { title: 'Same as Original', value: '' },
-  { title: '4 seconds', value: '4' },
-  { title: '8 seconds', value: '8' },
-  { title: '12 seconds', value: '12' }
-]
+const modelOptions = computed(() => {
+  if (isVeoVideo.value) {
+    return [
+      { title: 'Same as Original', value: '' },
+      { title: 'Veo 3.1', value: 'veo-3.1-generate-preview' },
+      { title: 'Veo 3.1 Fast', value: 'veo-3.1-fast-generate-preview' }
+    ]
+  } else {
+    return [
+      { title: 'Same as Original', value: '' },
+      { title: 'Sora 2', value: 'sora-2' },
+      { title: 'Sora 2 Pro', value: 'sora-2-pro' }
+    ]
+  }
+})
+
+const durationOptions = computed(() => {
+  if (isVeoVideo.value) {
+    // Veo extensions support 4, 6, 8 seconds (must be 8s for extensions per docs, but let's allow flexibility)
+    return [
+      { title: 'Same as Original', value: '' },
+      { title: '4 seconds', value: '4' },
+      { title: '6 seconds', value: '6' },
+      { title: '8 seconds', value: '8' }
+    ]
+  } else {
+    return [
+      { title: 'Same as Original', value: '' },
+      { title: '4 seconds', value: '4' },
+      { title: '8 seconds', value: '8' },
+      { title: '12 seconds', value: '12' }
+    ]
+  }
+})
 
 watch(() => props.modelValue, (isOpen) => {
   if (!isOpen) {

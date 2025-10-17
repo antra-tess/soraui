@@ -1,13 +1,39 @@
 import ffmpeg from 'fluent-ffmpeg';
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 
-// Use system-installed ffmpeg and ffprobe (installed in Docker/system)
-// In Alpine Linux (Docker), these are installed to /usr/bin/
-const ffmpegPath = process.env.FFMPEG_PATH || '/usr/bin/ffmpeg';
-const ffprobePath = process.env.FFPROBE_PATH || '/usr/bin/ffprobe';
+// Use system-installed ffmpeg and ffprobe
+// Try multiple common locations
+import { execSync } from 'child_process';
+
+function findExecutable(name: string, defaultPath: string): string {
+  if (process.env[`${name.toUpperCase()}_PATH`]) {
+    return process.env[`${name.toUpperCase()}_PATH`]!;
+  }
+  
+  // Try to find using 'which' command
+  try {
+    const result = execSync(`which ${name}`, { encoding: 'utf8' }).trim();
+    if (result) return result;
+  } catch (e) {
+    // Fall through to default paths
+  }
+  
+  // Try common paths
+  const commonPaths = [
+    `/opt/homebrew/bin/${name}`, // Homebrew on Apple Silicon
+    `/usr/local/bin/${name}`,     // Homebrew on Intel Mac
+    `/usr/bin/${name}`,           // Linux/Docker
+    name                          // Try from PATH
+  ];
+  
+  return commonPaths[0]; // Return first as fallback
+}
+
+const ffmpegPath = findExecutable('ffmpeg', '/usr/bin/ffmpeg');
+const ffprobePath = findExecutable('ffprobe', '/usr/bin/ffprobe');
 
 try {
   ffmpeg.setFfmpegPath(ffmpegPath);
@@ -25,16 +51,19 @@ try {
  */
 export function extractLastFrame(videoPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    const outputDir = dirname(outputPath);
+    const tempFilename = `last-frame-${randomUUID()}.jpg`;
+    
     ffmpeg(videoPath)
       .screenshots({
         count: 1,
-        filename: 'last-frame.jpg',
-        folder: join(outputPath, '..'),
+        filename: tempFilename,
+        folder: outputDir,
         timestamps: ['99%'] // Get frame at 99% (near the end)
       })
       .on('end', async () => {
         // Rename to target filename
-        const tempPath = join(join(outputPath, '..'), 'last-frame.jpg');
+        const tempPath = join(outputDir, tempFilename);
         try {
           await fs.rename(tempPath, outputPath);
           resolve();
