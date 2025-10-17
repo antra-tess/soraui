@@ -24,6 +24,7 @@ export interface Video {
   has_input_reference?: boolean;
   has_audio?: boolean; // For Veo videos - whether audio was generated
   reference_image_paths?: string; // JSON array of reference image paths
+  provider_metadata?: string; // JSON - provider-specific metadata (e.g., Veo file object for extensions)
   remix_of?: string;
   cost?: number;
 }

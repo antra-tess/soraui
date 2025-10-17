@@ -29,9 +29,10 @@ async function addImageColumns() {
 
     const hasAudio = columnNames.includes('has_audio');
     const hasRefImages = columnNames.includes('reference_image_paths');
+    const hasProviderMetadata = columnNames.includes('provider_metadata');
 
-    if (hasAudio && hasRefImages) {
-      console.log('✅ Image columns already exist!');
+    if (hasAudio && hasRefImages && hasProviderMetadata) {
+      console.log('✅ All columns already exist!');
       db.run('ROLLBACK');
       return;
     }
@@ -46,6 +47,11 @@ async function addImageColumns() {
     if (!hasRefImages) {
       db.run('ALTER TABLE videos ADD COLUMN reference_image_paths TEXT');
       console.log('✅ Added reference_image_paths column');
+    }
+
+    if (!hasProviderMetadata) {
+      db.run('ALTER TABLE videos ADD COLUMN provider_metadata TEXT');
+      console.log('✅ Added provider_metadata column (needed for Veo extensions!)');
     }
 
     db.run('COMMIT');

@@ -64,22 +64,24 @@
     </v-card-title>
 
   <v-card-subtitle>
-    <v-chip size="small" :color="modelColor" class="mr-1">
-      {{ video.model }}
-    </v-chip>
-    <v-chip v-if="video.has_audio" size="small" color="purple" variant="tonal" class="mr-1">
-      <v-icon start size="small">mdi-volume-high</v-icon>
-      Audio
-    </v-chip>
-    <v-chip size="small" class="mr-1">
-      {{ video.size }}
-    </v-chip>
-    <v-chip size="small" class="mr-1">
-      {{ video.seconds }}s
-    </v-chip>
-    <v-chip v-if="video.cost" size="small" color="green" variant="tonal">
-      ${{ video.cost.toFixed(2) }}
-    </v-chip>
+    <div class="d-flex flex-wrap gap-1">
+      <v-chip size="small" :color="modelColor">
+        {{ video.model }}
+      </v-chip>
+      <v-chip v-if="video.has_audio" size="small" color="purple" variant="tonal">
+        <v-icon start size="small">mdi-volume-high</v-icon>
+        Audio
+      </v-chip>
+      <v-chip size="small">
+        {{ video.size }}
+      </v-chip>
+      <v-chip size="small">
+        {{ video.seconds }}s
+      </v-chip>
+      <v-chip v-if="video.cost" size="small" color="green" variant="tonal">
+        ${{ video.cost.toFixed(2) }}
+      </v-chip>
+    </div>
   </v-card-subtitle>
 
     <v-card-text>

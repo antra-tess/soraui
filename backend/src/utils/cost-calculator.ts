@@ -8,14 +8,14 @@
  *   - 720p: 1.0x
  *   - 1080p: 1.5x
  * 
- * Veo Pricing (Google):
- * - veo-3.1-generate-preview: $0.40/second (with audio)
- * - veo-3.1-fast-generate-preview: $0.15/second (with audio)
- * - veo-3-generate-preview: $0.40/second (with audio)
- * - veo-3-fast-generate-preview: $0.15/second (with audio)
+ * Veo Pricing (Google - SDK v1.25+):
+ * - veo-3.1-generate-preview: $0.40/second (always includes audio)
+ * - veo-3.1-fast-generate-preview: $0.15/second (always includes audio)
+ * - veo-3-generate-preview: $0.40/second (always includes audio)
+ * - veo-3-fast-generate-preview: $0.15/second (always includes audio)
  * 
- * Note: Veo pricing assumes audio generation (default behavior)
- * Audio-only mode would be half price but we don't expose that option
+ * Note: Audio generation is always enabled in SDK v1.25+
+ * Cannot be disabled via API
  */
 
 export function calculateVideoCost(
@@ -28,15 +28,13 @@ export function calculateVideoCost(
   
   // Determine provider and pricing
   if (model.startsWith('veo-')) {
-    // Veo pricing
+    // Veo pricing - always includes audio in SDK v1.25+
     let baseCostPerSecond: number;
     
     if (model.includes('fast')) {
-      // Veo Fast: $0.15 with audio, $0.10 video only
-      baseCostPerSecond = generateAudio ? 0.15 : 0.10;
+      baseCostPerSecond = 0.15; // Veo Fast with audio
     } else {
-      // Veo standard: $0.40 with audio, $0.20 video only
-      baseCostPerSecond = generateAudio ? 0.40 : 0.20;
+      baseCostPerSecond = 0.40; // Veo standard with audio
     }
     
     const cost = duration * baseCostPerSecond;

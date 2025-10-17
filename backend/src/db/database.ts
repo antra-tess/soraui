@@ -43,8 +43,8 @@ export class VideoDatabase {
       INSERT INTO videos (
         id, user_id, provider, provider_video_id, openai_video_id, 
         prompt, model, size, seconds, status, progress, created_at, 
-        has_input_reference, has_audio, reference_image_paths, remix_of, cost
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        has_input_reference, has_audio, reference_image_paths, provider_metadata, remix_of, cost
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       video.id,
       video.user_id,
@@ -61,6 +61,7 @@ export class VideoDatabase {
       video.has_input_reference ? 1 : 0,
       video.has_audio ? 1 : 0,
       video.reference_image_paths || null,
+      video.provider_metadata || null,
       video.remix_of || null,
       video.cost || 0
     ]);
@@ -193,6 +194,7 @@ export class VideoDatabase {
       has_input_reference: row.has_input_reference === 1,
       has_audio: row.has_audio === 1,
       reference_image_paths: row.reference_image_paths,
+      provider_metadata: row.provider_metadata,
       remix_of: row.remix_of,
       cost: row.cost || 0
     };

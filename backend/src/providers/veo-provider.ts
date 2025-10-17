@@ -5,16 +5,20 @@ import {
   ProviderCapabilities,
 } from './base-provider';
 import { GoogleGenAI } from '@google/genai';
-import { createWriteStream, createReadStream } from 'fs';
+import { createWriteStream, createReadStream, existsSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import axios from 'axios';
+import { VeoRestAPI } from './veo-rest-api';
 
 export class VeoProvider extends BaseVideoProvider {
   private client: GoogleGenAI;
+  private restAPI: VeoRestAPI;
 
   constructor(apiKey: string, videosDir: string) {
     super(apiKey, videosDir);
     this.client = new GoogleGenAI({});
+    this.restAPI = new VeoRestAPI(apiKey);
   }
 
   getProviderName(): string {
@@ -82,11 +86,10 @@ export class VeoProvider extends BaseVideoProvider {
       requestConfig.config.negativePrompt = config.negativePrompt;
     }
 
-    // Audio generation control (default: true)
-    if (config.generateAudio === false) {
-      requestConfig.config.generateAudio = false;
-    }
-
+    // Note: generateAudio parameter removed in SDK v1.25+
+    // Audio is always generated for Veo 3.1 models
+    // Use veo-3 models if you don't want audio
+    
     // Note: personGeneration removed - let Veo use its own defaults
     // Veo automatically handles this based on the input type
 
@@ -129,30 +132,34 @@ export class VeoProvider extends BaseVideoProvider {
       console.log('No reference images provided for this Veo video');
     }
 
-    // Start the video generation operation
-    const operation = await this.client.models.generateVideos(requestConfig);
+    // Use direct REST API (matches AI Studio's working implementation)
+    const restRequest = {
+      prompt: config.prompt,
+      aspectRatio: config.aspectRatio,
+      resolution: config.resolution || '720p',
+    };
+
+    const operation = await this.restAPI.generateVideo(config.model, restRequest);
 
     if (!operation.name) {
       throw new Error('Operation name not returned from Veo API');
     }
 
-    console.log('Google Veo response - Operation started:', operation.name);
+    console.log('Veo REST API - Operation started:', operation.name);
 
     return {
-      id: operation.name, // Operation name is the ID we'll use to poll
+      id: operation.name,
       status: 'queued',
       progress: 0,
       created_at: Math.floor(Date.now() / 1000),
-      metadata: { operation },
+      metadata: { operationName: operation.name },
     };
   }
 
   async getVideoStatus(operationName: string): Promise<ProviderVideoResponse> {
-    // Poll the operation status
-    const operation = await this.client.operations.getVideosOperation({
-      operation: { name: operationName },
-    });
-
+    // Use REST API directly
+    const operation = await this.restAPI.getOperation(operationName);
+    
     const done = operation.done || false;
     const hasError = operation.error !== undefined;
 
@@ -167,8 +174,16 @@ export class VeoProvider extends BaseVideoProvider {
       progress = 100;
     } else {
       status = 'in_progress';
-      // Veo doesn't provide granular progress, so we'll estimate
-      progress = 50; // Show as "in progress" without specific percentage
+      progress = 50;
+    }
+
+    // Extract Video object from REST response
+    let videoObjectForExtension: any = null;
+    if (done) {
+      const samples = operation.response?.generateVideoResponse?.generatedSamples;
+      if (samples?.[0]?.video) {
+        videoObjectForExtension = samples[0].video;
+      }
     }
 
     return {
@@ -178,7 +193,10 @@ export class VeoProvider extends BaseVideoProvider {
       created_at: Math.floor(Date.now() / 1000),
       completed_at: done ? Math.floor(Date.now() / 1000) : undefined,
       error: hasError ? JSON.stringify(operation.error) : undefined,
-      metadata: { operation },
+      metadata: { 
+        videoObject: videoObjectForExtension,
+        operationName
+      },
     };
   }
 
@@ -189,23 +207,24 @@ export class VeoProvider extends BaseVideoProvider {
     try {
       console.log(`Downloading Veo video - Operation: ${operationName}`);
       
-      // Get the completed operation with the video file
-      const operation = await this.client.operations.getVideosOperation({
-        operation: { name: operationName },
-      });
+      // Get the completed operation via REST API
+      const operation = await this.restAPI.getOperation(operationName);
 
-      console.log('Operation status:', {
-        done: operation.done,
-        hasResponse: !!operation.response,
-        hasVideos: !!operation.response?.generatedVideos,
-        videoCount: operation.response?.generatedVideos?.length
-      });
-
-      if (!operation.done || !operation.response?.generatedVideos?.[0]?.video) {
-        throw new Error('Video not ready or not found in operation response');
+      console.log('Operation done:', operation.done);
+      
+      if (!operation.done) {
+        throw new Error('Operation not complete');
+      }
+      
+      // REST API returns generatedSamples
+      const samples = operation.response?.generateVideoResponse?.generatedSamples;
+      
+      if (!samples?.[0]?.video) {
+        console.error('Operation response:', JSON.stringify(operation.response, null, 2));
+        throw new Error('Video not found in operation response');
       }
 
-      const videoFile = operation.response.generatedVideos[0].video;
+      const videoFile = samples[0].video;
       console.log('=== VIDEO FILE OBJECT ===');
       console.log(JSON.stringify(videoFile, null, 2));
       console.log('Video file keys:', Object.keys(videoFile || {}));
@@ -224,7 +243,6 @@ export class VeoProvider extends BaseVideoProvider {
       // Download the video from the URI
       // Note: Google file URIs may have auth embedded or use different auth
       const filePath = join(this.videosDir, `${localVideoId}.mp4`);
-      const axios = (await import('axios')).default;
       
       // Try with API key as query parameter (Google's file API pattern)
       const downloadUrl = `${downloadUri}${downloadUri.includes('?') ? '&' : '?'}key=${this.apiKey}`;
@@ -290,29 +308,48 @@ export class VeoProvider extends BaseVideoProvider {
   async extendVideo(
     operationName: string,
     prompt: string,
-    duration: string
+    duration: string,
+    localVideoPath?: string,
+    storedMetadata?: string,
+    originalAspectRatio?: string
   ): Promise<ProviderVideoResponse> {
-    // Get the original video
-    const operation = await this.client.operations.getVideosOperation({
-      operation: { name: operationName },
-    });
-
-    if (!operation.done || !operation.response?.generatedVideos?.[0]?.video) {
-      throw new Error('Original video not ready');
+    console.log('=== VEO EXTENSION REQUEST (Using Original Veo File) ===');
+    console.log('Extension prompt:', prompt);
+    console.log('Duration:', duration);
+    console.log('Has stored metadata:', !!storedMetadata);
+    
+    // Get the stored Video object from metadata (like AI Studio does)
+    let videoObjectForExtension: any;
+    
+    if (storedMetadata) {
+      try {
+        const metadata = JSON.parse(storedMetadata);
+        videoObjectForExtension = metadata.videoObject;
+        console.log('✅ Retrieved Video object from metadata:', JSON.stringify(videoObjectForExtension, null, 2));
+      } catch (error) {
+        console.error('Failed to parse stored metadata:', error);
+      }
     }
-
-    const videoFile = operation.response.generatedVideos[0].video;
-
-    // Start extension operation
-    const extensionOperation = await this.client.models.generateVideos({
-      model: 'veo-3.1-generate-preview',
-      video: videoFile,
+    
+    // If no stored Video object, we can't extend
+    if (!videoObjectForExtension) {
+      throw new Error('Cannot extend: Original Veo Video object not available. Only videos created with SDK v1.22+ can be extended.');
+    }
+    
+    console.log('✅ Using stored Video object for extension:', JSON.stringify(videoObjectForExtension, null, 2));
+    console.log('Original aspect ratio:', originalAspectRatio);
+    
+    // Use direct REST API with AI Studio's exact format
+    const restRequest = {
       prompt: prompt,
-      config: {
-        durationSeconds: parseInt(duration, 10), // Must be a number
-        // Note: Resolution is not supported for extensions, Veo uses original video resolution
-      },
-    } as any); // Cast to any - SDK types may not include video extension yet
+      aspectRatio: originalAspectRatio || '16:9', // Must match original video!
+      resolution: '720p',
+      video: videoObjectForExtension, // The Video object with URI!
+    };
+    
+    const extensionOperation = await this.restAPI.generateVideo('veo-3.1-generate-preview', restRequest);
+    
+    console.log('✅ Extension operation started:', extensionOperation.name);
 
     if (!extensionOperation.name) {
       throw new Error('Extension operation name not returned from Veo API');
@@ -323,7 +360,7 @@ export class VeoProvider extends BaseVideoProvider {
       status: 'queued',
       progress: 0,
       created_at: Math.floor(Date.now() / 1000),
-      metadata: { operation: extensionOperation },
+      metadata: { operationName: extensionOperation.name },
     };
   }
 }

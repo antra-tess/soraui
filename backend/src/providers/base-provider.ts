@@ -95,7 +95,10 @@ export abstract class BaseVideoProvider {
   abstract extendVideo?(
     providerVideoId: string,
     prompt: string,
-    duration: string
+    duration: string,
+    localVideoPath?: string,
+    storedMetadata?: string,
+    originalAspectRatio?: string
   ): Promise<ProviderVideoResponse>;
 
   /**

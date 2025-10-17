@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS videos (
   has_input_reference INTEGER DEFAULT 0,
   has_audio INTEGER DEFAULT 0,
   reference_image_paths TEXT,
+  provider_metadata TEXT,
   remix_of TEXT,
   cost REAL DEFAULT 0,
   FOREIGN KEY (remix_of) REFERENCES videos(id)

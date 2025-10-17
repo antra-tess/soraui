@@ -188,8 +188,9 @@ export class VideoService {
         progress: providerResponse.progress,
         created_at: providerResponse.created_at,
         has_input_reference: !!inputReferencePath || processedReferenceImages.length > 0,
-        has_audio: providerType === 'veo' ? generateAudio : undefined,
+        has_audio: providerType === 'veo' ? true : undefined, // Veo always generates audio in SDK v1.25+
         reference_image_paths: savedRefImagePaths.length > 0 ? JSON.stringify(savedRefImagePaths) : undefined,
+        provider_metadata: providerType === 'veo' ? JSON.stringify(providerResponse.metadata) : undefined,
         cost
       };
 
@@ -304,14 +305,22 @@ export class VideoService {
 
     // Check if provider supports native extension (Veo does, Sora doesn't)
     if (provider.extendVideo && originalVideo.provider === providerType) {
-      // Use native extension (for Veo)
+      // Use native extension (for Veo with new SDK v1.25 source API)
       console.log(`Using native extension for ${providerType} video`);
       
       const videoId = randomUUID();
+      
+      // Calculate aspect ratio from original video's size
+      const originalAspectRatio = this.sizeToAspectRatio(originalVideo.size);
+      
+      // Pass all needed info for extension
       const extensionResponse = await provider.extendVideo(
         originalVideo.provider_video_id,
         prompt,
-        videoDuration
+        videoDuration,
+        originalVideo.file_path, // Pass local video file
+        originalVideo.provider_metadata, // Pass stored Veo metadata with original file reference
+        originalAspectRatio // Pass original aspect ratio (9:16 or 16:9)
       );
 
       const cost = calculateVideoCost(videoModel, originalVideo.size, videoDuration, originalVideo.has_audio !== false);
@@ -485,6 +494,12 @@ export class VideoService {
           updates.file_path = downloadResult.videoPath;
           updates.thumbnail_path = downloadResult.thumbnailPath;
           updates.completed_at = Date.now();
+          
+          // Store provider metadata for Veo (needed for extensions)
+          if (video.provider === 'veo' && providerResponse.metadata) {
+            updates.provider_metadata = JSON.stringify(providerResponse.metadata);
+            console.log('Saved Veo metadata for future extensions');
+          }
         } catch (error) {
           console.error(`Error downloading video ${videoId}:`, error);
           updates.status = 'failed';

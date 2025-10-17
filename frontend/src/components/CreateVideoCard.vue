@@ -31,16 +31,11 @@
           class="mt-4"
         />
 
-        <v-switch
-          v-if="isVeoModel"
-          v-model="generateAudio"
-          label="Generate Audio"
-          :disabled="loading"
-          color="primary"
-          hint="Include synchronized speech, sound effects, and ambient audio (50% cost savings if disabled)"
-          persistent-hint
-          class="mt-2"
-        />
+        <!-- Audio toggle removed - Veo 3.1 always generates audio in SDK v1.25+ -->
+        <v-alert v-if="isVeoModel && model.includes('3.1')" type="info" variant="tonal" density="compact" class="mt-2">
+          <v-icon start>mdi-volume-high</v-icon>
+          Veo 3.1 models always include audio generation (dialogue, SFX, ambient sounds)
+        </v-alert>
 
         <v-row class="mt-2">
           <v-col cols="12">
@@ -312,7 +307,7 @@ async function handleSubmit() {
       if (negativePrompt.value) {
         formData.append('negativePrompt', negativePrompt.value)
       }
-      formData.append('generateAudio', generateAudio.value.toString())
+      // generateAudio removed - Veo 3.1 always generates audio in SDK v1.25+
       formData.append('veoImageMode', veoImageMode.value)
       
       // Handle different Veo image modes

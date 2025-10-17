@@ -61,7 +61,29 @@ if (!existsSync(VIDEOS_DIR)) {
   mkdirSync(VIDEOS_DIR, { recursive: true });
 }
 
-// Initialize services
+// Run database migrations before initializing
+console.log('🔄 Running database migrations...');
+try {
+  const { execSync } = await import('child_process');
+  
+  // Migration 1: Multi-provider support
+  execSync('npx tsx src/db/migrate-to-multi-provider.ts', {
+    cwd: process.cwd(),
+    stdio: 'inherit'
+  });
+  
+  // Migration 2: Image columns + provider_metadata (needed for Veo extensions!)
+  execSync('npx tsx src/db/add-image-columns.ts', {
+    cwd: process.cwd(),
+    stdio: 'inherit'
+  });
+  
+  console.log('✅ Migrations complete\n');
+} catch (error) {
+  console.log('⚠️ Migrations skipped or already applied\n');
+}
+
+// Initialize services AFTER migrations
 const db = new VideoDatabase(DATABASE_PATH);
 const userManager = new UserManager(USERS_FILE);
 const videoService = new VideoService(OPENAI_API_KEY, db, VIDEOS_DIR, GOOGLE_API_KEY);
