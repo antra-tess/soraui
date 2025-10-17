@@ -59,6 +59,8 @@ async function migrate() {
         thumbnail_path TEXT,
         error_message TEXT,
         has_input_reference INTEGER DEFAULT 0,
+        has_audio INTEGER DEFAULT 0,
+        reference_image_paths TEXT,
         remix_of TEXT,
         cost REAL DEFAULT 0,
         FOREIGN KEY (remix_of) REFERENCES videos_new(id)
@@ -74,13 +76,13 @@ async function migrate() {
         id, user_id, provider, provider_video_id, openai_video_id,
         prompt, model, size, seconds, status, progress,
         created_at, completed_at, file_path, thumbnail_path,
-        error_message, has_input_reference, remix_of, cost
+        error_message, has_input_reference, has_audio, reference_image_paths, remix_of, cost
       )
       SELECT 
         id, user_id, 'sora', openai_video_id, openai_video_id,
         prompt, model, size, seconds, status, progress,
         created_at, completed_at, file_path, thumbnail_path,
-        error_message, has_input_reference, remix_of, cost
+        error_message, has_input_reference, 0, NULL, remix_of, cost
       FROM videos
     `);
 

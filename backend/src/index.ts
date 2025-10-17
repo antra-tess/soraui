@@ -61,25 +61,33 @@ if (!existsSync(VIDEOS_DIR)) {
   mkdirSync(VIDEOS_DIR, { recursive: true });
 }
 
-// Initialize services
-const db = new VideoDatabase(DATABASE_PATH);
-const userManager = new UserManager(USERS_FILE);
-const videoService = new VideoService(OPENAI_API_KEY, db, VIDEOS_DIR, GOOGLE_API_KEY);
-
-// Initialize database (async)
-await db.initialize();
-
-// Run auto-migration for multi-provider support
+// Run auto-migrations BEFORE initializing database
 console.log('🔄 Checking database schema...');
 try {
   const { execSync } = await import('child_process');
+  
+  // Migration 1: Multi-provider support (provider, provider_video_id columns)
   execSync('npx tsx src/db/migrate-to-multi-provider.ts', {
+    cwd: process.cwd(),
+    stdio: 'inherit'
+  });
+  
+  // Migration 2: Image columns (has_audio, reference_image_paths)
+  execSync('npx tsx src/db/add-image-columns.ts', {
     cwd: process.cwd(),
     stdio: 'inherit'
   });
 } catch (error) {
   console.log('Migration check complete or already applied');
 }
+
+// Initialize services AFTER migration
+const db = new VideoDatabase(DATABASE_PATH);
+const userManager = new UserManager(USERS_FILE);
+const videoService = new VideoService(OPENAI_API_KEY, db, VIDEOS_DIR, GOOGLE_API_KEY);
+
+// Initialize database (async) - will now load the migrated schema
+await db.initialize();
 
 // Resume polling for any in-progress videos (e.g., after server restart)
 setTimeout(() => {
