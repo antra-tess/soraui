@@ -69,6 +69,18 @@ const videoService = new VideoService(OPENAI_API_KEY, db, VIDEOS_DIR, GOOGLE_API
 // Initialize database (async)
 await db.initialize();
 
+// Run auto-migration for multi-provider support
+console.log('🔄 Checking database schema...');
+try {
+  const { execSync } = await import('child_process');
+  execSync('npx tsx src/db/migrate-to-multi-provider.ts', {
+    cwd: process.cwd(),
+    stdio: 'inherit'
+  });
+} catch (error) {
+  console.log('Migration check complete or already applied');
+}
+
 // Resume polling for any in-progress videos (e.g., after server restart)
 setTimeout(() => {
   videoService.resumePolling().catch(err => {
