@@ -22,7 +22,7 @@ export function calculateVideoCost(
   model: string,
   size: string,
   seconds: string,
-  generateAudio: boolean = true
+  generateAudio: boolean = false // Default off for cost savings
 ): number {
   const duration = parseInt(seconds) || 0;
   

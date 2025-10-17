@@ -85,7 +85,7 @@ export class VideoService {
     inputReferencePath?: string,
     negativePrompt?: string,
     resolution?: string,
-    generateAudio: boolean = true,
+    generateAudio: boolean = false, // Default off for 50% cost savings
     personGeneration?: 'allow_all' | 'allow_adult' | 'dont_allow',
     referenceImagePaths?: string[],
     lastFramePath?: string

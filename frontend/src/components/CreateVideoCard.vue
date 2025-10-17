@@ -201,7 +201,7 @@ const model = ref<VideoModel>('sora-2')
 const size = ref('1280x720')
 const seconds = ref('8')
 const negativePrompt = ref('')
-const generateAudio = ref(true)
+const generateAudio = ref(false) // Default off for cost savings
 const veoImageMode = ref<'none' | 'image-to-video' | 'reference-images' | 'interpolation'>('none')
 const inputReference = ref<File | File[] | null>(null)
 const referenceImages = ref<File[]>([])
@@ -347,7 +347,7 @@ async function handleSubmit() {
     // Reset form
     prompt.value = ''
     negativePrompt.value = ''
-    generateAudio.value = true
+    generateAudio.value = false // Default off for cost savings
     veoImageMode.value = 'none'
     inputReference.value = null
     referenceImages.value = []

@@ -98,7 +98,7 @@ export function createVideosRouter(videoService: VideoService, videosDir: string
         inputReferencePath,
         negativePrompt,
         resolution,
-        generateAudio !== 'false' && generateAudio !== false, // Default true
+        generateAudio === 'true' || generateAudio === true, // Default false for cost savings
         personGeneration, // Will be determined by provider based on image usage
         referenceImagePaths,
         lastFramePath
