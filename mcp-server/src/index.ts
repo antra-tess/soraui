@@ -65,18 +65,25 @@ class Sora2MCPServer {
     return [
       {
         name: 'create_video',
-        description: 'Create a new video using Sora AI. Returns a video ID to monitor progress.',
+        description: 'Create a new video using Sora or Veo. Sora for remixing/quality, Veo for audio generation. Returns a video ID to monitor progress.',
         inputSchema: {
           type: 'object',
           properties: {
             prompt: {
               type: 'string',
-              description: 'Detailed description of the video to create. Include shot type, subject, action, setting, and lighting for best results.'
+              description: 'Detailed description of the video. For Veo: use quotes for dialogue, describe SFX and ambient sounds!'
             },
             model: {
               type: 'string',
-              enum: ['sora-2', 'sora-2-pro'],
-              description: 'Model to use. sora-2 is faster, sora-2-pro is higher quality.',
+              enum: [
+                'sora-2', 
+                'sora-2-pro',
+                'veo-3.1-generate-preview',
+                'veo-3.1-fast-generate-preview',
+                'veo-3-generate-preview',
+                'veo-3-fast-generate-preview'
+              ],
+              description: 'Model to use. Sora: general purpose. Veo 3.1: native audio generation (always on). Choose -fast variants for quicker results.',
               default: 'sora-2'
             },
             size: {
@@ -87,9 +94,13 @@ class Sora2MCPServer {
             },
             seconds: {
               type: 'string',
-              enum: ['4', '8', '12'],
-              description: 'Video duration in seconds',
+              enum: ['4', '6', '8', '12'],
+              description: 'Video duration in seconds. Sora: 4/8/12. Veo: 4/6/8.',
               default: '8'
+            },
+            negative_prompt: {
+              type: 'string',
+              description: 'Optional. Veo only. What to avoid in the video (e.g., "cartoon, low quality")'
             }
           },
           required: ['prompt']
