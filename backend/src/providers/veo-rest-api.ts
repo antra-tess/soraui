@@ -13,7 +13,9 @@ export interface VeoVideoGenerationRequest {
   aspectRatio?: string;
   resolution: string;
   video?: { uri: string }; // For extensions
-  forceAspectRatio?: boolean; // Force aspectRatio even for extensions
+  image?: { bytesBase64Encoded: string; mimeType: string }; // For image-to-video
+  lastFrame?: { bytesBase64Encoded: string; mimeType: string }; // For interpolation
+  referenceImages?: Array<{ image: { bytesBase64Encoded: string; mimeType: string }; referenceType: string }>; // For style guidance
 }
 
 export interface VeoOperation {
@@ -41,6 +43,21 @@ export class VeoRestAPI {
     // For extensions, add video in instances
     if (request.video) {
       instances[0].video = request.video;
+    }
+
+    // For image-to-video, add image with base64 in instances
+    if (request.image) {
+      instances[0].image = request.image;
+    }
+
+    // For interpolation, add lastFrame in instances (NOT parameters!)
+    if (request.lastFrame) {
+      instances[0].lastFrame = request.lastFrame;
+    }
+
+    // For reference images, add to instances (NOT parameters!)
+    if (request.referenceImages && request.referenceImages.length > 0) {
+      instances[0].referenceImages = request.referenceImages;
     }
 
     const parameters: any = {

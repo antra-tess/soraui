@@ -133,11 +133,50 @@ export class VeoProvider extends BaseVideoProvider {
     }
 
     // Use direct REST API (matches AI Studio's working implementation)
-    const restRequest = {
+    const restRequest: any = {
       prompt: config.prompt,
       aspectRatio: config.aspectRatio,
       resolution: config.resolution || '720p',
     };
+
+    // Add image data with base64 (REST API format: bytesBase64Encoded)
+    if (config.inputReferencePath) {
+      const imageBytes = await readFile(config.inputReferencePath);
+      restRequest.image = {
+        bytesBase64Encoded: imageBytes.toString('base64'),
+        mimeType: 'image/jpeg',
+      };
+      console.log('✅ Added input image (base64)');
+    }
+
+    // Add last frame for interpolation
+    if (config.lastFramePath) {
+      const lastFrameBytes = await readFile(config.lastFramePath);
+      restRequest.lastFrame = {
+        bytesBase64Encoded: lastFrameBytes.toString('base64'),
+        mimeType: 'image/jpeg',
+      };
+      console.log('✅ Added last frame (base64)');
+    }
+
+    // Add reference images
+    if (config.referenceImagePaths && config.referenceImagePaths.length > 0) {
+      console.log(`Adding ${config.referenceImagePaths.length} reference images...`);
+      restRequest.referenceImages = await Promise.all(
+        config.referenceImagePaths.map(async (path, index) => {
+          const imageBytes = await readFile(path);
+          console.log(`Reference image ${index + 1}: ${path}`);
+          return {
+            image: {
+              bytesBase64Encoded: imageBytes.toString('base64'),
+              mimeType: 'image/jpeg',
+            },
+            referenceType: 'asset',
+          };
+        })
+      );
+      console.log(`✅ All reference images added (base64)`);
+    }
 
     const operation = await this.restAPI.generateVideo(config.model, restRequest);
 
